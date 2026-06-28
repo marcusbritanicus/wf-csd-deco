@@ -27,22 +27,21 @@ const wf_decorator_manager_listener decorator_listener =
 };
 
 void registry_add_object(void*, struct wl_registry *registry, uint32_t name,
-        const char *interface, uint32_t)
+    const char *interface, uint32_t)
 {
     std::cout << "new registry: " << interface << std::endl;
     if (strcmp(interface, wf_decorator_manager_interface.name) == 0)
     {
         std::cout << "bind it" << std::endl;
         decorator_manager =
-            (wf_decorator_manager*) wl_registry_bind(registry, name, &wf_decorator_manager_interface, 1u);
+            (wf_decorator_manager*)wl_registry_bind(registry, name, &wf_decorator_manager_interface, 1u);
 
         wf_decorator_manager_add_listener(decorator_manager, &decorator_listener, NULL);
     }
 }
 
 void registry_remove_object(void*, struct wl_registry*, uint32_t)
-{
-}
+{}
 
 static struct wl_registry_listener registry_listener =
 {
@@ -57,7 +56,7 @@ void update_borders(uint32_t id, uint32_t top, uint32_t bottom, uint32_t left, u
 
 void setup_protocol(GdkDisplay *displ)
 {
-    auto display = gdk_wayland_display_get_wl_display(displ);
+    auto display  = gdk_wayland_display_get_wl_display(displ);
     auto registry = wl_display_get_registry(display);
 
     wl_registry_add_listener(registry, &registry_listener, NULL);
