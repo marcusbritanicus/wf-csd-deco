@@ -209,7 +209,6 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
                 // fallthrough
                 this->deco_state = gtk4_decoration_tx_state::STABLE;
                 wf::txn::emit_object_ready(this);
-                LOGI("emit_object_ready");
                 break;
             }
 
@@ -218,7 +217,11 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
 
         this->committed = final;
         wlr_xdg_toplevel_set_size(toplevel, final.width, final.height);
-        on_deco_commit.emit(nullptr);
+        if (on_deco_commit.is_connected())
+        {
+            on_deco_commit.emit(nullptr);
+        }
+
         this->deco_state = gtk4_decoration_tx_state::WAITING_FINAL;
     }
 
@@ -273,6 +276,7 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
 
         LOGI("Committing with ", pending);
         recompute_mask();
+        wf::scene::readd_front(target_view->get_surface_root_node(), root_node);
 
         wlr_box box = toplevel->base->geometry;
 
@@ -298,7 +302,10 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
 
         deco_node->apply_state(std::move(pending_state));
         recompute_mask();
-        on_commit.emit(nullptr);
+        if (on_commit.is_connected())
+        {
+            on_commit.emit(nullptr);
+        }
     }
 
     std::shared_ptr<wf::toplevel_t> decorated_toplevel;
@@ -331,7 +338,11 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
             }
 
             size_updated();
-            on_deco_commit.emit(nullptr);
+
+            if (on_deco_commit.is_connected())
+            {
+                on_deco_commit.emit(nullptr);
+            }
         });
 
         on_deco_commit.set_callback([=] (void*)
@@ -352,14 +363,12 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
                 LOGI("Adjusting target on deco commit: ", desired);
                 if (wlr_xwayland_surface_try_from_wlr_surface(target_view->get_wlr_surface()))
                 {
-                    LOGI("wlr_xwayland_surface_configure");
                     auto vg = wf::toplevel_cast(target_view)->get_geometry();
                     wlr_xwayland_surface_configure(wlr_xwayland_surface_try_from_wlr_surface(target_view->
                         get_wlr_surface()),
                         vg.x, vg.y, desired.width, desired.height);
                 } else
                 {
-                    LOGI("wlr_xdg_toplevel_set_size");
                     wlr_xdg_toplevel_set_size(wlr_xdg_toplevel_try_from_wlr_surface(target_view->
                         get_wlr_surface()),
                         desired.width, desired.height);
@@ -437,6 +446,7 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
         target_view->get_output()->connect(&on_fullscreen_request);
         target_view->connect(&on_view_title_changed);
         target_view->connect(&on_view_tiled);
+        target_view->connect(&on_target_unmapped);
         on_request_minimize.connect(&toplevel->events.request_minimize);
         on_new_popup.connect(&wlr_xdg_surface_try_from_wlr_surface(
             deco_node->get_surface())->client->shell->events.new_popup);
@@ -469,6 +479,7 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
         on_deco_commit.disconnect();
         on_deco_destroy.disconnect();
         on_target_destroy.disconnect();
+        on_target_unmapped.disconnect();
         on_new_popup.disconnect();
         on_request_move.disconnect();
         on_request_resize.disconnect();
@@ -480,22 +491,12 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
         on_view_tiled.disconnect();
 
         this->toplevel = nullptr;
-
-        switch (deco_state)
-        {
-          case gtk4_decoration_tx_state::STABLE:
-            break;
-
-          case gtk4_decoration_tx_state::START:
-          // fallthrough
-          case gtk4_decoration_tx_state::TENTATIVE:
-          // fallthrough
-          case gtk4_decoration_tx_state::WAITING_FINAL:
-            deco_state = gtk4_decoration_tx_state::STABLE;
-            wf::txn::emit_object_ready(this);
-            break;
-        }
     }
+
+    wf::signal::connection_t<wf::view_unmapped_signal> on_target_unmapped = [=] (wf::view_unmapped_signal *ev)
+    {
+        handle_destroy();
+    };
 
     void handle_maximize()
     {
@@ -575,7 +576,6 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
             .height = bbox.height - margin_top - margin_bottom - 2,
         };
         masked->allowed ^= cut_out;
-        wf::scene::readd_front(target_view->get_surface_root_node(), root_node);
     }
 
     double margin_left = 0;
