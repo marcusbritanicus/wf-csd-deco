@@ -271,7 +271,14 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
 
           case gtk4_decoration_tx_state::TENTATIVE:
             // Client commits twice?
-            break;
+        {
+            auto vg = wf::toplevel_cast(target_view)->get_geometry();
+            if (use_csd && (wf::dimensions(box) != wf::dimensions(vg)))
+            {
+                wlr_xdg_toplevel_set_size(toplevel, vg.width, vg.height);
+            }
+        }
+        break;
 
           case gtk4_decoration_tx_state::START:
             deco_state = gtk4_decoration_tx_state::TENTATIVE;
@@ -289,12 +296,6 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
             wf::scene::set_node_enabled(target_view->get_root_node(), true);
             wf::scene::set_node_enabled(target_view->get_root_node(), true);
             wf::scene::update(target_view->get_root_node(), wf::scene::update_flag::REFOCUS);
-        }
-
-        if (use_csd)
-        {
-            auto vg = wf::toplevel_cast(target_view)->get_geometry();
-            wlr_xdg_toplevel_set_size(toplevel, vg.width, vg.height);
         }
     }
 
