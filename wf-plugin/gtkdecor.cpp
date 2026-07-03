@@ -244,6 +244,23 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
             LOGI(wf::dimensions(box), " != ", committed);
             committed = wf::dimensions(box);
             adjust_target_geometry();
+            auto vg = wf::toplevel_cast(target_view)->get_geometry();
+            auto min_width = 275;
+            if (box.width < min_width)
+            {
+                LOGD("Adjusting target on deco commit: width: ", box.width, " < ", min_width);
+                if (wlr_xwayland_surface_try_from_wlr_surface(target_view->get_wlr_surface()))
+                {
+                    wlr_xwayland_surface_configure(wlr_xwayland_surface_try_from_wlr_surface(target_view->
+                        get_wlr_surface()),
+                        vg.x, vg.y, min_width - 1, vg.height - (margin_top + margin_bottom) / 2 - 9);
+                } else
+                {
+                    wlr_xdg_toplevel_set_size(wlr_xdg_toplevel_try_from_wlr_surface(target_view->
+                        get_wlr_surface()),
+                        min_width, box.height);
+                }
+            }
         }
 
         switch (this->deco_state)
@@ -332,17 +349,17 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
     void adjust_target_geometry()
     {
         auto desired = wf::dimensions(deco_node->get_bounding_box());
-        desired.width  -= margin_left + margin_right;
-        desired.height -= margin_top + margin_bottom + 2;
         auto tg = wf::dimensions(toplevel->base->geometry);
         if (!target_view->get_wlr_surface())
         {
             return;
         }
 
-        desired.width  = std::max(tg.width, desired.width);
-        desired.height = std::max(tg.height, desired.height);
-        desired.width  = std::max(desired.width, wf::toplevel_cast(
+        desired.width  -= margin_left + margin_right;
+        desired.height -= margin_top + margin_bottom + 2;
+        desired.width   = std::max(tg.width, desired.width);
+        desired.height  = std::max(tg.height, desired.height);
+        desired.width   = std::max(desired.width, wf::toplevel_cast(
             target_view)->toplevel()->get_min_size().width);
         desired.height = std::max(desired.height, wf::toplevel_cast(
             target_view)->toplevel()->get_min_size().height);
