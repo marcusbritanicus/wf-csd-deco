@@ -217,8 +217,6 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
                 wf::txn::emit_object_ready(this);
                 break;
             }
-
-            return;
         }
 
         this->committed = final;
@@ -248,17 +246,12 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
             auto min_width = 275;
             if (target_view->get_wlr_surface() && (box.width < min_width))
             {
-                LOGD("Adjusting target on deco commit: width: ", box.width, " < ", min_width);
                 if (wlr_xwayland_surface_try_from_wlr_surface(target_view->get_wlr_surface()))
                 {
+                    LOGD("Adjusting target on deco commit: width: ", box.width, " < ", min_width);
                     wlr_xwayland_surface_configure(wlr_xwayland_surface_try_from_wlr_surface(target_view->
                         get_wlr_surface()),
                         vg.x, vg.y, min_width - 1, vg.height - (margin_top + margin_bottom) / 2 - 9);
-                } else
-                {
-                    wlr_xdg_toplevel_set_size(wlr_xdg_toplevel_try_from_wlr_surface(target_view->
-                        get_wlr_surface()),
-                        min_width, box.height);
                 }
             }
         }
