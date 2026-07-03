@@ -37,6 +37,7 @@ void registry_add_object(void*, struct wl_registry *registry, uint32_t name,
             (wf_decorator_manager*)wl_registry_bind(registry, name, &wf_decorator_manager_interface, 1u);
 
         wf_decorator_manager_add_listener(decorator_manager, &decorator_listener, NULL);
+        wl_registry_destroy(registry);
     }
 }
 
@@ -61,5 +62,4 @@ void setup_protocol(GdkDisplay *displ)
 
     wl_registry_add_listener(registry, &registry_listener, NULL);
     wl_display_roundtrip(display);
-    wl_registry_destroy(registry);
 }

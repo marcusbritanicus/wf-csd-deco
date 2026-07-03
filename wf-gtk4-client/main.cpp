@@ -36,7 +36,7 @@ static gboolean on_close_request(GtkWindow *window, gpointer data)
     return false;
 }
 
-static void size_allocate(GObject*, GParamSpec*, gpointer data)
+static void on_area_resized(GtkDrawingArea*, int w, int h, gpointer data)
 {
     printf("size_allocate\n");
     auto cdata = (custom_data*)data;
@@ -61,14 +61,11 @@ static void size_allocate(GObject*, GParamSpec*, gpointer data)
         return element.second == win;
     });
 
-    if (it != view_to_decor.end())
+    if ((it != view_to_decor.end()) && (final_y > 0))
     {
         uint32_t id = it->first;
         update_borders(id, final_y, final_x, final_x, final_x);
     }
-
-    g_signal_handler_disconnect(win, cdata->size_allocate_signal);
-    free(cdata);
 }
 
 static void on_menu_action(GSimpleAction *action, GVariant *parameter, gpointer user_data)
@@ -86,8 +83,8 @@ GtkWidget *create_deco_window(std::string title)
     auto data = (custom_data*)malloc(sizeof(custom_data));
     data->window = window;
     data->area   = area;
-    data->size_allocate_signal = g_signal_connect(window, "notify::default-width", G_CALLBACK(
-        size_allocate), data);
+
+    data->size_allocate_signal = g_signal_connect(area, "resize", G_CALLBACK(on_area_resized), data);
     g_signal_connect(window, "close-request", G_CALLBACK(on_close_request), window);
 
     GtkWidget *header = gtk_header_bar_new();
