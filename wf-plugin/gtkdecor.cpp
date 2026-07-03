@@ -246,7 +246,7 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
             adjust_target_geometry();
             auto vg = wf::toplevel_cast(target_view)->get_geometry();
             auto min_width = 275;
-            if (box.width < min_width)
+            if (target_view->get_wlr_surface() && (box.width < min_width))
             {
                 LOGD("Adjusting target on deco commit: width: ", box.width, " < ", min_width);
                 if (wlr_xwayland_surface_try_from_wlr_surface(target_view->get_wlr_surface()))
