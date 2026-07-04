@@ -140,11 +140,16 @@ static void on_button_released(GtkGestureClick *gesture,
     auto wdata    = (window_data*)user_data;
     auto group_id = wdata->group.id;
 
+    if (!group_id)
+    {
+        return;
+    }
+
     clear_group_tabs(group_id);
 
     for (auto cdata : win_data)
     {
-        if (group_id && (group_id == cdata.second->group.id))
+        if (group_id == cdata.second->group.id)
         {
             if (cdata.second->group.parent)
             {
