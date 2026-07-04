@@ -41,6 +41,7 @@
 #include <type_traits>
 #include <wayfire/util.hpp>
 #include <wayfire/view.hpp>
+#include <wayfire/plugins/common/util.hpp>
 
 #include <wayfire/signal-definitions.hpp>
 #include "wf-decorator-protocol.h"
@@ -373,8 +374,6 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
                     get_wlr_surface()),
                     tg.width, tg.height);
             }
-
-            last_size = desired;
         }
     }
 
@@ -504,8 +503,6 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
         {
             wf::scene::add_front(target_view->get_surface_root_node(), root_node);
         }
-
-        last_size = wf::dimensions(target_view->get_bounding_box());
     }
 
     void handle_destroy()
@@ -591,6 +588,7 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
     bool use_csd     = false;
     bool borders_set = false;
     wayfire_view target_view;
+    wf::point_t ungroup_restore_position;
     std::shared_ptr<wf::scene::translation_node_t> root_node;
 
   private:
@@ -625,7 +623,6 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
 
     wlr_xdg_toplevel *toplevel;
     decoration_node_t deco_node;
-    wf::dimensions_t last_size;
 
     wf::wl_listener_wrapper on_commit, on_deco_destroy, on_target_destroy, on_new_popup;
     wf::wl_listener_wrapper on_request_move, on_request_resize, on_request_minimize;
@@ -739,7 +736,10 @@ void do_group_windows(wl_client*, struct wl_resource*, uint32_t parent_id, uint3
         wf::scene::set_node_enabled(child->get_root_node(), false);
     }
 
+    auto cg = wf::toplevel_cast(child)->get_geometry();
+    child_data->decoration->ungroup_restore_position = {cg.x, cg.y};
     auto vg = wf::toplevel_cast(parent)->get_geometry();
+    parent_data->decoration->ungroup_restore_position = {vg.x, vg.y};
     wf::toplevel_cast(child)->move(vg.x, vg.y);
 }
 
@@ -765,17 +765,19 @@ void do_select_window(wl_client*, struct wl_resource*, uint32_t select_id)
         return;
     }
 
-    while (!view->get_root_node()->is_enabled())
-    {
-        wf::scene::set_node_enabled(view->get_root_node(), true);
-    }
-
     auto view_data = wf::toplevel_cast(view)->toplevel()->get_data<gtk4_toplevel_custom_data>();
 
     if (!view_data)
     {
         return;
     }
+
+    while (!view->get_root_node()->is_enabled())
+    {
+        wf::scene::set_node_enabled(view->get_root_node(), true);
+    }
+
+    wf::get_core().default_wm->focus_raise_view(view);
 
     auto group_id = view_data->decoration->group_id;
 
@@ -805,11 +807,96 @@ void do_select_window(wl_client*, struct wl_resource*, uint32_t select_id)
     }
 }
 
+void do_ungroup_window(wl_client*, struct wl_resource*, uint32_t id)
+{
+    wayfire_view view = nullptr;
+    for (auto& v : wf::get_core().get_all_views())
+    {
+        if (v->role != wf::VIEW_ROLE_TOPLEVEL)
+        {
+            continue;
+        }
+
+        if (v->get_id() == id)
+        {
+            view = v;
+            break;
+        }
+    }
+
+    if (!view)
+    {
+        return;
+    }
+
+    auto view_data = wf::toplevel_cast(view)->toplevel()->get_data<gtk4_toplevel_custom_data>();
+
+    if (!view_data)
+    {
+        return;
+    }
+
+    auto rg = view_data->decoration->ungroup_restore_position;
+    view_data->decoration->ungroup_restore_position = {0, 0};
+
+    auto group_id = view_data->decoration->group_id;
+    view_data->decoration->group_id = 0;
+
+    if (!group_id)
+    {
+        return;
+    }
+
+    wf::toplevel_cast(view)->move(rg.x, rg.y);
+
+    while (!view->get_root_node()->is_enabled())
+    {
+        wf::scene::set_node_enabled(view->get_root_node(), true);
+    }
+
+    wayfire_view unhide_me = nullptr;
+    auto last_group_focused_timestamp = 0;
+    for (auto& v : wf::get_core().get_all_views())
+    {
+        if ((v->role != wf::VIEW_ROLE_TOPLEVEL) || (v == view))
+        {
+            continue;
+        }
+
+        auto data = wf::toplevel_cast(v)->toplevel()->get_data<gtk4_toplevel_custom_data>();
+        if (data)
+        {
+            if (data->decoration->group_id == group_id)
+            {
+                if (v->get_root_node()->is_enabled())
+                {
+                    return;
+                }
+
+                if (wf::get_focus_timestamp(v) > last_group_focused_timestamp)
+                {
+                    last_group_focused_timestamp = wf::get_focus_timestamp(v);
+                    unhide_me = v;
+                }
+            }
+        }
+    }
+
+    if (unhide_me)
+    {
+        while (!unhide_me->get_root_node()->is_enabled())
+        {
+            wf::scene::set_node_enabled(unhide_me->get_root_node(), true);
+        }
+    }
+}
+
 const struct wf_decorator_manager_interface decorator_implementation =
 {
     .update_borders = do_update_borders,
     .group_windows  = do_group_windows,
-    .select_window  = do_select_window
+    .select_window  = do_select_window,
+    .ungroup_window = do_ungroup_window
 };
 
 void unbind_decorator(wl_resource*)

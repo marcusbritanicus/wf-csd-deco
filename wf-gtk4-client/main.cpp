@@ -113,10 +113,50 @@ static void on_button_pressed(GtkGestureClick *gesture,
     double y,
     gpointer user_data)
 {
-    g_print("on_button_pressed\n");
-    auto data = (window_data*)user_data;
+    auto wdata = (window_data*)user_data;
 
-    select_window(data->wf_id);
+    select_window(wdata->wf_id);
+}
+
+static void add_tab_button(window_data *wdata, window_data *cdata);
+static void clear_group_tabs(uint32_t group_id);
+static void reparent_group(uint32_t group_id, window_data *last_parent);
+static void refresh_group(uint32_t group_id);
+
+static void on_button_released(GtkGestureClick *gesture,
+    int n_press,
+    double x,
+    double y,
+    gpointer user_data)
+{
+    auto wdata    = (window_data*)user_data;
+    auto group_id = wdata->group.id;
+
+    clear_group_tabs(group_id);
+
+    for (auto cdata : win_data)
+    {
+        if (group_id && (group_id == cdata.second->group.id))
+        {
+            if (cdata.second->group.parent)
+            {
+                cdata.second->group.order.erase(std::remove(cdata.second->group.order.begin(),
+                    cdata.second->group.order.end(), wdata->wf_id), cdata.second->group.order.end());
+                if (wdata->wf_id == cdata.second->wf_id)
+                {
+                    reparent_group(group_id, wdata);
+                }
+
+                break;
+            }
+        }
+    }
+
+    wdata->group.id = 0;
+
+    add_tab_button(wdata, wdata);
+    refresh_group(group_id);
+    ungroup_window(wdata->wf_id);
 }
 
 static void add_tab_button(window_data *wdata, window_data *cdata)
@@ -137,6 +177,11 @@ static void add_tab_button(window_data *wdata, window_data *cdata)
     g_signal_connect(click_gesture, "pressed", G_CALLBACK(on_button_pressed), cdata);
     gtk_widget_add_controller(button, GTK_EVENT_CONTROLLER(click_gesture));
 
+    click_gesture = gtk_gesture_click_new();
+    gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(click_gesture), 2);
+    g_signal_connect(click_gesture, "released", G_CALLBACK(on_button_released), cdata);
+    gtk_widget_add_controller(button, GTK_EVENT_CONTROLLER(click_gesture));
+
     gtk_box_append(GTK_BOX(wdata->tab_box), button);
 }
 
@@ -146,6 +191,86 @@ static void clear_box(GtkWidget *box)
     while ((child = gtk_widget_get_first_child(box)) != NULL)
     {
         gtk_box_remove(GTK_BOX(box), child);
+    }
+}
+
+static void clear_group_tabs(uint32_t group_id)
+{
+    std::vector<uint32_t> button_order;
+
+    if (!group_id)
+    {
+        return;
+    }
+
+    for (auto wdata : win_data)
+    {
+        if ((wdata.second->group.id == group_id) && wdata.second->group.parent)
+        {
+            button_order = wdata.second->group.order;
+            break;
+        }
+    }
+
+    for (auto id : button_order)
+    {
+        auto wdata = win_data[view_to_decor[id]];
+        if (wdata->group.id == group_id)
+        {
+            clear_box(wdata->tab_box);
+        }
+    }
+}
+
+static void reparent_group(uint32_t group_id, window_data *last_parent)
+{
+    if (!group_id)
+    {
+        return;
+    }
+
+    for (auto wdata : win_data)
+    {
+        if ((wdata.second->group.id == group_id) && !wdata.second->group.parent)
+        {
+            wdata.second->group.order  = last_parent->group.order;
+            wdata.second->group.parent = true;
+            last_parent->group.parent  = false;
+            last_parent->group.order.clear();
+            last_parent->group.id = 0;
+            break;
+        }
+    }
+}
+
+static void refresh_group(uint32_t group_id)
+{
+    std::vector<uint32_t> button_order;
+
+    if (!group_id)
+    {
+        return;
+    }
+
+    for (auto wdata : win_data)
+    {
+        if ((wdata.second->group.id == group_id) && wdata.second->group.parent)
+        {
+            button_order = wdata.second->group.order;
+            break;
+        }
+    }
+
+    for (auto wdata : win_data)
+    {
+        for (auto id : button_order)
+        {
+            auto cdata = win_data[view_to_decor[id]];
+            if ((cdata->group.id == group_id) && (wdata.second->group.id == group_id))
+            {
+                add_tab_button(wdata.second.get(), cdata.get());
+            }
+        }
     }
 }
 
@@ -193,43 +318,23 @@ static gboolean drop_cb(GtkDropTarget *target,
             }
 
             drop_target_data->group.parent = true;
+            drop_target_data->group.id     = group_id;
             drop_target_data->group.order.push_back(drop_target_data->wf_id);
         }
 
         drag_source_data->group.id = group_id;
-        drop_target_data->group.id = group_id;
-        drop_target_data->group.order.push_back(drag_source_data->wf_id);
-        std::vector<uint32_t> button_order;
+
         for (auto wdata : win_data)
         {
             if ((wdata.second->group.id == group_id) && wdata.second->group.parent)
             {
-                button_order = wdata.second->group.order;
+                wdata.second->group.order.push_back(drag_source_data->wf_id);
                 break;
             }
         }
 
-        clear_box(drag_source_data->tab_box);
-        for (auto id : button_order)
-        {
-            auto wdata = win_data[view_to_decor[id]];
-            if (wdata->group.id == group_id)
-            {
-                clear_box(wdata->tab_box);
-            }
-        }
-
-        for (auto wdata : win_data)
-        {
-            for (auto id : button_order)
-            {
-                auto cdata = win_data[view_to_decor[id]];
-                if ((cdata->group.id == group_id) && (wdata.second->group.id == group_id))
-                {
-                    add_tab_button(wdata.second.get(), cdata.get());
-                }
-            }
-        }
+        clear_group_tabs(group_id);
+        refresh_group(group_id);
 
         return true;
     }
@@ -295,7 +400,7 @@ GtkWidget *create_deco_window(uint32_t wf_id)
     gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled_window), GTK_POLICY_EXTERNAL,
         GTK_POLICY_NEVER);
     gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scrolled_window), tab_box);
-    gtk_scrolled_window_set_min_content_width(GTK_SCROLLED_WINDOW(scrolled_window), 75);
+    gtk_scrolled_window_set_min_content_width(GTK_SCROLLED_WINDOW(scrolled_window), 115);
     gtk_box_prepend(GTK_BOX(title_box), scrolled_window);
 
     GtkEventController *controller = gtk_event_controller_scroll_new(GTK_EVENT_CONTROLLER_SCROLL_BOTH_AXES);

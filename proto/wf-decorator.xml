@@ -21,6 +21,10 @@
             <arg name="id" type="uint"/>
         </request>
 
+        <request name="ungroup_window">
+            <arg name="id" type="uint"/>
+        </request>
+
         <event name="title_changed">
             <arg name="decoration" type="uint"/>
             <arg name="new_title" type="string"/>

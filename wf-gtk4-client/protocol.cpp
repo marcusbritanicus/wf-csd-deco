@@ -62,14 +62,19 @@ void update_borders(uint32_t id, uint32_t top, uint32_t bottom, uint32_t left, u
     wf_decorator_manager_update_borders(decorator_manager, id, top, bottom, left, right);
 }
 
+void group_windows(uint32_t parent_id, uint32_t child_id)
+{
+    wf_decorator_manager_group_windows(decorator_manager, parent_id, child_id);
+}
+
 void select_window(uint32_t id)
 {
     wf_decorator_manager_select_window(decorator_manager, id);
 }
 
-void group_windows(uint32_t parent_id, uint32_t child_id)
+void ungroup_window(uint32_t id)
 {
-    wf_decorator_manager_group_windows(decorator_manager, parent_id, child_id);
+    wf_decorator_manager_ungroup_window(decorator_manager, id);
 }
 
 void setup_protocol(GdkDisplay *displ)
