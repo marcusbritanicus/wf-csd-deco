@@ -367,7 +367,7 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
                 auto vg = wf::toplevel_cast(target_view)->get_geometry();
                 wlr_xwayland_surface_configure(wlr_xwayland_surface_try_from_wlr_surface(target_view->
                     get_wlr_surface()),
-                    vg.x, vg.y, tg.width, tg.height);
+                    vg.x, vg.y, desired.width, desired.height);
             } else
             {
                 wlr_xdg_toplevel_set_size(wlr_xdg_toplevel_try_from_wlr_surface(target_view->
@@ -911,6 +911,16 @@ static void handle_deco_client_destroy(struct wl_listener *listener, void *data)
     for (auto & node : deco_nodes)
     {
         wf::scene::remove_child(node);
+    }
+
+    for (auto & view : wf::get_core().get_all_views())
+    {
+        if (!wf::toplevel_cast(view))
+        {
+            continue;
+        }
+
+        wf::toplevel_cast(view)->toplevel()->erase_data<gtk4_toplevel_custom_data>();
     }
 
     for (auto & output : wf::get_core().output_layout->get_outputs())
