@@ -18,6 +18,12 @@ static void activate(GtkApplication *app, gpointer)
     g_application_hold(G_APPLICATION(app));
 }
 
+static void on_button_released(GtkGestureClick *gesture,
+    int n_press,
+    double x,
+    double y,
+    gpointer user_data);
+
 static gboolean on_close_request(GtkWindow *window, gpointer data)
 {
     GtkWidget *win = (GtkWidget*)data;
@@ -26,6 +32,8 @@ static gboolean on_close_request(GtkWindow *window, gpointer data)
     {
         return element.second == win;
     });
+
+    on_button_released(NULL, 0, 0, 0, win_data[(GtkWidget*)window].get());
 
     if (it != view_to_decor.end())
     {
@@ -415,11 +423,19 @@ GtkWidget *create_deco_window(uint32_t wf_id)
     win_data[window] = wdata;
 
     cdata->size_allocate_signal = g_signal_connect(area, "resize", G_CALLBACK(on_area_resized), cdata);
-    g_signal_connect(window, "close-request", G_CALLBACK(on_close_request), window);
 
     gtk_window_present(GTK_WINDOW(window));
 
     return window;
+}
+
+void destroy_deco_window(uint32_t wf_id)
+{
+    auto window = view_to_decor[wf_id];
+    if (window)
+    {
+        on_close_request(GTK_WINDOW(window), win_data[window].get());
+    }
 }
 
 void set_title(GtkWidget *window, const char *title)

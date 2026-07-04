@@ -148,6 +148,7 @@ static const std::string gtk_decorator_prefix = "__wf_decorator:";
 wl_resource *decorator_resource = NULL;
 wl_listener deco_client_destroy_listener;
 std::vector<std::shared_ptr<wf::scene::wlr_surface_node_t>> deco_nodes;
+void do_ungroup_window(wl_client*, struct wl_resource*, uint32_t id);
 
 class gtk4_decoration_object_t : public wf::txn::transaction_object_t
 {
@@ -507,6 +508,8 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
 
     void handle_destroy()
     {
+        do_ungroup_window(NULL, NULL, target_view->get_id());
+        wf_decorator_manager_send_destroy_decoration(decorator_resource, target_view->get_id());
         on_commit.disconnect();
         on_deco_destroy.disconnect();
         on_target_destroy.disconnect();

@@ -14,6 +14,12 @@ static void create_new_decoration(void*, wf_decorator_manager*, uint32_t view_id
     view_to_decor[view_id] = window;
 }
 
+static void destroy_decoration(void*, wf_decorator_manager*, uint32_t view_id)
+{
+    std::cout << "destroy decoration" << std::endl;
+    destroy_deco_window(view_id);
+}
+
 static void title_changed(void*,
     wf_decorator_manager*, uint32_t view, const char *new_title)
 {
@@ -29,6 +35,7 @@ static void app_id_changed(void*,
 const wf_decorator_manager_listener decorator_listener =
 {
     create_new_decoration,
+    destroy_decoration,
     title_changed,
     app_id_changed
 };

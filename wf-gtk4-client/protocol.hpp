@@ -26,6 +26,7 @@ struct window_data
 void setup_protocol(GdkDisplay *display);
 
 GtkWidget *create_deco_window(uint32_t wf_id);
+void destroy_deco_window(uint32_t wf_id);
 
 void set_title(GtkWidget *window, const char *title);
 void set_app_id(GtkWidget *window, const char *app_id);
