@@ -509,7 +509,11 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
     void handle_destroy()
     {
         do_ungroup_window(NULL, NULL, target_view->get_id());
-        wf_decorator_manager_send_destroy_decoration(decorator_resource, target_view->get_id());
+        if (decorator_resource)
+        {
+            wf_decorator_manager_send_destroy_decoration(decorator_resource, target_view->get_id());
+        }
+
         on_commit.disconnect();
         on_deco_destroy.disconnect();
         on_target_destroy.disconnect();
@@ -916,16 +920,6 @@ static void handle_deco_client_destroy(struct wl_listener *listener, void *data)
         wf::scene::remove_child(node);
     }
 
-    for (auto & view : wf::get_core().get_all_views())
-    {
-        if (!wf::toplevel_cast(view))
-        {
-            continue;
-        }
-
-        wf::toplevel_cast(view)->toplevel()->erase_data<gtk4_toplevel_custom_data>();
-    }
-
     for (auto & output : wf::get_core().output_layout->get_outputs())
     {
         output->render->damage_whole();
@@ -955,14 +949,6 @@ void bind_decorator(wl_client *client, void*, uint32_t, uint32_t id)
             wf::get_core().protocols.decorator_manager,
             WLR_SERVER_DECORATION_MANAGER_MODE_CLIENT);
         wf_decorator_manager_send_create_new_decoration(decorator_resource, view->get_id());
-
-        auto data = wf::toplevel_cast(view)->toplevel()->get_data_safe<gtk4_toplevel_custom_data>();
-
-        auto bg = view->get_bounding_box();
-        auto vg = wf::toplevel_cast(view)->get_geometry();
-        data->margin_offset.x = vg.x - bg.x;
-        data->margin_offset.y = vg.y - bg.y;
-        LOGD("margin_offsets: ", data->margin_offset.x, ",", data->margin_offset.y);
     }
 }
 
