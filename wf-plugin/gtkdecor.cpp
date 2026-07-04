@@ -587,6 +587,7 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
         this->margin_offset = offset;
     }
 
+    uint32_t group_id = 0;
     bool use_csd     = false;
     bool borders_set = false;
     wayfire_view target_view;
@@ -676,9 +677,139 @@ void do_update_borders(wl_client*, struct wl_resource*, uint32_t id, uint32_t to
     wf::get_core().tx_manager->schedule_object(wf::toplevel_cast(data->decoration->target_view)->toplevel());
 }
 
+void do_group_windows(wl_client*, struct wl_resource*, uint32_t parent_id, uint32_t child_id)
+{
+    uint32_t group_id = 1;
+    wayfire_view parent = nullptr, child = nullptr;
+    for (auto& v : wf::get_core().get_all_views())
+    {
+        if (v->role != wf::VIEW_ROLE_TOPLEVEL)
+        {
+            continue;
+        }
+
+        if (v->get_id() == parent_id)
+        {
+            parent = v;
+        }
+
+        if (v->get_id() == child_id)
+        {
+            child = v;
+        }
+
+        auto data = wf::toplevel_cast(v)->toplevel()->get_data<gtk4_toplevel_custom_data>();
+        if (data)
+        {
+            if (data->decoration->group_id >= group_id)
+            {
+                group_id = data->decoration->group_id + 1;
+            }
+        }
+    }
+
+    if (!parent || !child)
+    {
+        return;
+    }
+
+    auto parent_data = wf::toplevel_cast(parent)->toplevel()->get_data<gtk4_toplevel_custom_data>();
+    auto child_data  = wf::toplevel_cast(child)->toplevel()->get_data<gtk4_toplevel_custom_data>();
+
+    if (!parent_data || !child_data)
+    {
+        return;
+    }
+
+    if (!parent_data->decoration->group_id)
+    {
+        parent_data->decoration->group_id = child_data->decoration->group_id = group_id;
+    } else
+    {
+        child_data->decoration->group_id = parent_data->decoration->group_id;
+    }
+
+    while (!parent->get_root_node()->is_enabled())
+    {
+        wf::scene::set_node_enabled(parent->get_root_node(), true);
+    }
+
+    while (child->get_root_node()->is_enabled())
+    {
+        wf::scene::set_node_enabled(child->get_root_node(), false);
+    }
+
+    auto vg = wf::toplevel_cast(parent)->get_geometry();
+    wf::toplevel_cast(child)->move(vg.x, vg.y);
+}
+
+void do_select_window(wl_client*, struct wl_resource*, uint32_t select_id)
+{
+    wayfire_view view = nullptr;
+    for (auto& v : wf::get_core().get_all_views())
+    {
+        if (v->role != wf::VIEW_ROLE_TOPLEVEL)
+        {
+            continue;
+        }
+
+        if (v->get_id() == select_id)
+        {
+            view = v;
+            break;
+        }
+    }
+
+    if (!view)
+    {
+        return;
+    }
+
+    while (!view->get_root_node()->is_enabled())
+    {
+        wf::scene::set_node_enabled(view->get_root_node(), true);
+    }
+
+    auto view_data = wf::toplevel_cast(view)->toplevel()->get_data<gtk4_toplevel_custom_data>();
+
+    if (!view_data)
+    {
+        return;
+    }
+
+    auto group_id = view_data->decoration->group_id;
+
+    if (!group_id)
+    {
+        return;
+    }
+
+    for (auto& v : wf::get_core().get_all_views())
+    {
+        if ((v->role != wf::VIEW_ROLE_TOPLEVEL) || (v == view))
+        {
+            continue;
+        }
+
+        auto data = wf::toplevel_cast(v)->toplevel()->get_data<gtk4_toplevel_custom_data>();
+        if (data)
+        {
+            if (data->decoration->group_id == group_id)
+            {
+                while (v->get_root_node()->is_enabled())
+                {
+                    wf::scene::set_node_enabled(v->get_root_node(), false);
+                }
+            }
+        }
+    }
+}
+
 const struct wf_decorator_manager_interface decorator_implementation =
 {
-    .update_borders = do_update_borders
+    .update_borders = do_update_borders,
+    .group_windows  = do_group_windows,
+    .select_window  = do_select_window
 };
 
 void unbind_decorator(wl_resource*)
@@ -739,6 +870,52 @@ class gtk4_decoration_plugin : public wf::plugin_interface_t
 {
   public:
     wl_global *decorator_global;
+
+    wf::signal::connection_t<wf::view_geometry_changed_signal> on_view_geometry_changed =
+        [=] (wf::view_geometry_changed_signal *ev)
+    {
+        if (ev->view->role != wf::VIEW_ROLE_TOPLEVEL)
+        {
+            return;
+        }
+
+        auto data = wf::toplevel_cast(ev->view)->toplevel()->get_data<gtk4_toplevel_custom_data>();
+
+        if (!data || !data->decoration)
+        {
+            return;
+        }
+
+        auto group_id = data->decoration->group_id;
+
+        if (!group_id)
+        {
+            return;
+        }
+
+        auto vg = wf::toplevel_cast(ev->view)->get_geometry();
+
+        for (auto& v : wf::get_core().get_all_views())
+        {
+            if ((v->role != wf::VIEW_ROLE_TOPLEVEL) || (v == ev->view))
+            {
+                continue;
+            }
+
+            auto cdata = wf::toplevel_cast(v)->toplevel()->get_data<gtk4_toplevel_custom_data>();
+            if (!cdata || !cdata->decoration)
+            {
+                continue;
+            }
+
+            if (cdata->decoration->group_id != group_id)
+            {
+                continue;
+            }
+
+            wf::toplevel_cast(v)->move(vg.x, vg.y);
+        }
+    };
 
     void init_decor(wayfire_view view, wlr_surface *surface)
     {
@@ -804,6 +981,7 @@ class gtk4_decoration_plugin : public wf::plugin_interface_t
         wf::get_core().tx_manager->schedule_object(target->toplevel());
 
         wf_decorator_manager_send_title_changed(decorator_resource, id, target->get_title().c_str());
+        wf_decorator_manager_send_app_id_changed(decorator_resource, id, target->get_app_id().c_str());
         wf::scene::set_node_enabled(decoration_root_node, false);
         do_update_borders(NULL, NULL, target->get_id(), 0, 0, 0, 0);
         auto vg = target->get_geometry();
@@ -935,6 +1113,7 @@ class gtk4_decoration_plugin : public wf::plugin_interface_t
 
         wf::get_core().connect(&on_mapped);
         wf::get_core().connect(&on_pre_map);
+        wf::get_core().connect(&on_view_geometry_changed);
         wf::get_core().tx_manager->connect(&on_new_tx);
     }
 };

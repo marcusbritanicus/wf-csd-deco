@@ -33,6 +33,8 @@ static gboolean on_close_request(GtkWindow *window, gpointer data)
         view_to_decor.erase(id);
     }
 
+    win_data.erase(win);
+
     return false;
 }
 
@@ -68,46 +70,247 @@ static void on_area_resized(GtkDrawingArea*, int w, int h, gpointer data)
     }
 }
 
-static void on_menu_action(GSimpleAction *action, GVariant *parameter, gpointer user_data)
+// --- Drag Source Setup ---
+static GdkContentProvider *drag_prepare_cb(GtkDragSource *source,
+    double x,
+    double y,
+    gpointer user_data)
 {
-    g_print("Menu item clicked\n");
+    g_print("Drag prepare.\n");
+    auto data = (window_data*)user_data;
+    // Initialize the GValue with a string and set it
+    GValue value = G_VALUE_INIT;
+    g_value_init(&value, G_TYPE_INT);
+    g_value_set_int(&value, data->wf_id);
+    auto content_provider = gdk_content_provider_new_for_value(&value);
+    gtk_gesture_set_state(GTK_GESTURE(source), GTK_EVENT_SEQUENCE_CLAIMED);
+    return content_provider;
 }
 
-GtkWidget *create_deco_window(std::string title)
+static void drag_begin_cb(GtkDragSource *source,
+    GdkDrag *drag,
+    gpointer user_data)
+{
+    g_print("Drag begin.\n");
+    auto data = (window_data*)user_data;
+    GtkDragIcon *drag_icon = GTK_DRAG_ICON(gtk_drag_icon_get_for_drag(drag));
+    GtkWidget *image = gtk_image_new_from_icon_name(data->app_id.c_str());
+    gtk_image_set_pixel_size(GTK_IMAGE(image), 48);
+    gtk_drag_icon_set_child(drag_icon, image);
+}
+
+static void drag_end_cb(GtkDragSource *source,
+    GdkDrag *drag,
+    gboolean delete_data,
+    gpointer user_data)
+{
+    g_print("Drag operation completed.\n");
+}
+
+static void on_button_pressed(GtkGestureClick *gesture,
+    int n_press,
+    double x,
+    double y,
+    gpointer user_data)
+{
+    g_print("on_button_pressed\n");
+    auto data = (window_data*)user_data;
+
+    select_window(data->wf_id);
+}
+
+static void add_tab_button(window_data *wdata, window_data *cdata)
+{
+    GtkWidget *button = gtk_button_new_from_icon_name(cdata->app_id.c_str());
+
+    if (!cdata->group.id)
+    {
+        GtkDragSource *drag_source = gtk_drag_source_new();
+        gtk_drag_source_set_actions(drag_source, GdkDragAction(GDK_ACTION_COPY | GDK_ACTION_MOVE));
+        g_signal_connect(drag_source, "prepare", G_CALLBACK(drag_prepare_cb), wdata);
+        g_signal_connect(drag_source, "drag-begin", G_CALLBACK(drag_begin_cb), wdata);
+        g_signal_connect(drag_source, "drag-end", G_CALLBACK(drag_end_cb), NULL);
+        gtk_widget_add_controller(button, GTK_EVENT_CONTROLLER(drag_source));
+    }
+
+    GtkGesture *click_gesture = gtk_gesture_click_new();
+    g_signal_connect(click_gesture, "pressed", G_CALLBACK(on_button_pressed), cdata);
+    gtk_widget_add_controller(button, GTK_EVENT_CONTROLLER(click_gesture));
+
+    gtk_box_append(GTK_BOX(wdata->tab_box), button);
+}
+
+static void clear_box(GtkWidget *box)
+{
+    GtkWidget *child;
+    while ((child = gtk_widget_get_first_child(box)) != NULL)
+    {
+        gtk_box_remove(GTK_BOX(box), child);
+    }
+}
+
+// --- Drop Target Setup ---
+static gboolean drop_cb(GtkDropTarget *target,
+    const GValue *value,
+    double x,
+    double y,
+    gpointer user_data)
+{
+    g_print("Drop.\n");
+    auto drop_target_data = (window_data*)user_data;
+    uint32_t group_id     = 1;
+
+    if (G_VALUE_HOLDS(value, G_TYPE_INT))
+    {
+        auto wf_id = g_value_get_int(value);
+        printf("%s: wf_id: %d\n", __func__, wf_id);
+        if (drop_target_data->wf_id == wf_id)
+        {
+            g_print("Dropped on self, ignoring\n");
+            return false;
+        }
+
+        g_print("Dropped on target, success!\n");
+        group_windows(drop_target_data->wf_id, wf_id);
+        auto drag_source_data = win_data[view_to_decor[wf_id]];
+        if (drag_source_data->group.id)
+        {
+            g_print("Drag source already grouped, ignoring\n");
+            return false;
+        }
+
+        if (drop_target_data->group.id)
+        {
+            group_id = drop_target_data->group.id;
+        } else
+        {
+            for (auto wdata : win_data)
+            {
+                if (wdata.second->group.id >= group_id)
+                {
+                    group_id = wdata.second->group.id + 1;
+                }
+            }
+
+            drop_target_data->group.parent = true;
+            drop_target_data->group.order.push_back(drop_target_data->wf_id);
+        }
+
+        drag_source_data->group.id = group_id;
+        drop_target_data->group.id = group_id;
+        drop_target_data->group.order.push_back(drag_source_data->wf_id);
+        std::vector<uint32_t> button_order;
+        for (auto wdata : win_data)
+        {
+            if ((wdata.second->group.id == group_id) && wdata.second->group.parent)
+            {
+                button_order = wdata.second->group.order;
+                break;
+            }
+        }
+
+        clear_box(drag_source_data->tab_box);
+        for (auto id : button_order)
+        {
+            auto wdata = win_data[view_to_decor[id]];
+            if (wdata->group.id == group_id)
+            {
+                clear_box(wdata->tab_box);
+            }
+        }
+
+        for (auto wdata : win_data)
+        {
+            for (auto id : button_order)
+            {
+                auto cdata = win_data[view_to_decor[id]];
+                if ((cdata->group.id == group_id) && (wdata.second->group.id == group_id))
+                {
+                    add_tab_button(wdata.second.get(), cdata.get());
+                }
+            }
+        }
+
+        return true;
+    }
+
+    g_print("Drop data does not contain int value. Fail.\n");
+    return false;
+}
+
+static gboolean on_scroll_cb(GtkEventControllerScroll *controller,
+    gdouble dx,
+    gdouble dy,
+    gpointer user_data)
+{
+    auto wdata = (window_data*)user_data;
+
+    GtkAdjustment *h_adj = gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(wdata->scrolled_window));
+
+    gdouble current_value = gtk_adjustment_get_value(h_adj);
+    gdouble new_value     = current_value + (dy * 10.0);
+
+    gdouble lower = gtk_adjustment_get_lower(h_adj);
+    gdouble upper = gtk_adjustment_get_upper(h_adj);
+    new_value = CLAMP(new_value, lower, upper);
+
+    auto group_id = wdata->group.id;
+
+    if (group_id)
+    {
+        for (auto cdata : win_data)
+        {
+            if (cdata.second->group.id == group_id)
+            {
+                h_adj =
+                    gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(cdata.second->scrolled_window));
+                gtk_adjustment_set_value(h_adj, new_value);
+            }
+        }
+    }
+
+    return true;
+}
+
+GtkWidget *create_deco_window(uint32_t wf_id)
 {
     auto window = gtk_application_window_new(app);
     gtk_window_set_default_size(GTK_WINDOW(window), 300, 300);
     auto area = gtk_drawing_area_new();
     gtk_window_set_child(GTK_WINDOW(window), area);
-    gtk_window_set_title(GTK_WINDOW(window), title.c_str());
-    auto data = (custom_data*)malloc(sizeof(custom_data));
-    data->window = window;
-    data->area   = area;
+    gtk_window_set_title(GTK_WINDOW(window), ("__wf_decorator:" + std::to_string(wf_id)).c_str());
+    auto cdata = (custom_data*)malloc(sizeof(custom_data));
+    cdata->window = window;
+    cdata->area   = area;
 
-    data->size_allocate_signal = g_signal_connect(area, "resize", G_CALLBACK(on_area_resized), data);
-    g_signal_connect(window, "close-request", G_CALLBACK(on_close_request), window);
+    auto wdata = std::make_shared<window_data>();
 
     GtkWidget *header = gtk_header_bar_new();
     gtk_window_set_titlebar(GTK_WINDOW(window), header);
 
-    GMenu *menu = g_menu_new();
-    g_menu_append(menu, "Preferences", "app.prefs");
-    g_menu_append(menu, "About", "app.about");
+    GtkWidget *scrolled_window = gtk_scrolled_window_new();
+    GtkWidget *tab_box   = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 3);
+    GtkWidget *title_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_widget_set_hexpand(title_box, true);
+    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scrolled_window), GTK_POLICY_EXTERNAL,
+        GTK_POLICY_NEVER);
+    gtk_scrolled_window_set_child(GTK_SCROLLED_WINDOW(scrolled_window), tab_box);
+    gtk_scrolled_window_set_min_content_width(GTK_SCROLLED_WINDOW(scrolled_window), 75);
+    gtk_box_prepend(GTK_BOX(title_box), scrolled_window);
 
-    GtkWidget *popover = gtk_popover_menu_new_from_model(G_MENU_MODEL(menu));
-    GtkWidget *button  = gtk_menu_button_new();
-    gtk_menu_button_set_popover(GTK_MENU_BUTTON(button), popover);
-    gtk_menu_button_set_icon_name(GTK_MENU_BUTTON(button), "open-menu-symbolic");
+    GtkEventController *controller = gtk_event_controller_scroll_new(GTK_EVENT_CONTROLLER_SCROLL_BOTH_AXES);
+    g_signal_connect(controller, "scroll", G_CALLBACK(on_scroll_cb), wdata.get());
+    gtk_widget_add_controller(tab_box, controller);
 
-    gtk_header_bar_pack_end(GTK_HEADER_BAR(header), button);
+    wdata->scrolled_window = scrolled_window;
+    wdata->title_box  = title_box;
+    wdata->header_bar = header;
+    wdata->tab_box    = tab_box;
+    wdata->wf_id     = wf_id;
+    win_data[window] = wdata;
 
-    GSimpleAction *prefs_action = g_simple_action_new("prefs", NULL);
-    g_signal_connect(prefs_action, "activate", G_CALLBACK(on_menu_action), NULL);
-    g_action_map_add_action(G_ACTION_MAP(app), G_ACTION(prefs_action));
-
-    GSimpleAction *about_action = g_simple_action_new("about", NULL);
-    g_signal_connect(about_action, "activate", G_CALLBACK(on_menu_action), NULL);
-    g_action_map_add_action(G_ACTION_MAP(app), G_ACTION(about_action));
+    cdata->size_allocate_signal = g_signal_connect(area, "resize", G_CALLBACK(on_area_resized), cdata);
+    g_signal_connect(window, "close-request", G_CALLBACK(on_close_request), window);
 
     gtk_window_present(GTK_WINDOW(window));
 
@@ -117,6 +320,24 @@ GtkWidget *create_deco_window(std::string title)
 void set_title(GtkWidget *window, const char *title)
 {
     gtk_window_set_title(GTK_WINDOW(window), title);
+}
+
+void set_app_id(GtkWidget *window, const char *app_id)
+{
+    auto wdata = win_data[window];
+    wdata->app_id = app_id;
+
+    GtkWidget *image = gtk_image_new_from_icon_name(app_id);
+    gtk_header_bar_pack_start(GTK_HEADER_BAR(wdata->header_bar), image);
+
+    add_tab_button(wdata.get(), wdata.get());
+
+    GtkDropTarget *drop_target =
+        gtk_drop_target_new(G_TYPE_INT, GdkDragAction(GDK_ACTION_COPY | GDK_ACTION_MOVE));
+    g_signal_connect(drop_target, "drop", G_CALLBACK(drop_cb), wdata.get());
+    gtk_widget_add_controller(wdata->tab_box, GTK_EVENT_CONTROLLER(drop_target));
+
+    gtk_header_bar_set_title_widget(GTK_HEADER_BAR(wdata->header_bar), wdata->title_box);
 }
 
 int main(int argc, char **argv)

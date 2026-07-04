@@ -7,11 +7,11 @@
 wl_display *display;
 wf_decorator_manager *decorator_manager;
 
-static void create_new_decoration(void*, wf_decorator_manager*, uint32_t view)
+static void create_new_decoration(void*, wf_decorator_manager*, uint32_t view_id)
 {
     std::cout << "create new decoration" << std::endl;
-    auto window = create_deco_window("__wf_decorator:" + std::to_string(view));
-    view_to_decor[view] = window;
+    auto window = create_deco_window(view_id);
+    view_to_decor[view_id] = window;
 }
 
 static void title_changed(void*,
@@ -20,10 +20,17 @@ static void title_changed(void*,
     set_title(view_to_decor[view], new_title);
 }
 
+static void app_id_changed(void*,
+    wf_decorator_manager*, uint32_t view, const char *new_app_id)
+{
+    set_app_id(view_to_decor[view], new_app_id);
+}
+
 const wf_decorator_manager_listener decorator_listener =
 {
     create_new_decoration,
-    title_changed
+    title_changed,
+    app_id_changed
 };
 
 void registry_add_object(void*, struct wl_registry *registry, uint32_t name,
@@ -53,6 +60,16 @@ static struct wl_registry_listener registry_listener =
 void update_borders(uint32_t id, uint32_t top, uint32_t bottom, uint32_t left, uint32_t right)
 {
     wf_decorator_manager_update_borders(decorator_manager, id, top, bottom, left, right);
+}
+
+void select_window(uint32_t id)
+{
+    wf_decorator_manager_select_window(decorator_manager, id);
+}
+
+void group_windows(uint32_t parent_id, uint32_t child_id)
+{
+    wf_decorator_manager_group_windows(decorator_manager, parent_id, child_id);
 }
 
 void setup_protocol(GdkDisplay *displ)
