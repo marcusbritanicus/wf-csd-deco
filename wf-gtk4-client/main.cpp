@@ -479,7 +479,7 @@ void set_app_id(GtkWidget *window, const char *app_id)
     g_signal_connect(drop_target, "drop", G_CALLBACK(drop_cb), wdata.get());
     gtk_widget_add_controller(wdata->tab_box, GTK_EVENT_CONTROLLER(drop_target));
 
-    gtk_header_bar_set_title_widget(GTK_HEADER_BAR(wdata->header_bar), wdata->title_box);
+    gtk_header_bar_pack_start(GTK_HEADER_BAR(wdata->header_bar), wdata->title_box);
 }
 
 int main(int argc, char **argv)
