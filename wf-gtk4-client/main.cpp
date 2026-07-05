@@ -5,7 +5,7 @@ GtkApplication *app;
 
 struct custom_data
 {
-    GtkWidget *window;
+    uint32_t id;
     GtkWidget *area;
     gulong size_allocate_signal;
 };
@@ -50,7 +50,7 @@ static void on_area_resized(GtkDrawingArea*, int w, int h, gpointer data)
 {
     printf("size_allocate\n");
     auto cdata = (custom_data*)data;
-    auto win   = cdata->window;
+    auto id    = cdata->id;
     auto area  = cdata->area;
     GtkNative *native = gtk_widget_get_native(area);
 
@@ -65,15 +65,8 @@ static void on_area_resized(GtkDrawingArea*, int w, int h, gpointer data)
     double width   = bounds.size.width;
     double height  = bounds.size.height;
 
-    auto it = std::find_if(view_to_decor.begin(), view_to_decor.end(),
-        [&win] (const std::pair<uint32_t, GtkWidget*>& element)
+    if (final_y > 0)
     {
-        return element.second == win;
-    });
-
-    if ((it != view_to_decor.end()) && (final_y > 0))
-    {
-        uint32_t id = it->first;
         update_borders(id, final_y, final_x, final_x, final_x);
     }
 }
@@ -398,8 +391,8 @@ GtkWidget *create_deco_window(uint32_t wf_id)
     gtk_window_set_child(GTK_WINDOW(window), area);
     gtk_window_set_title(GTK_WINDOW(window), ("__wf_decorator:" + std::to_string(wf_id)).c_str());
     auto cdata = (custom_data*)malloc(sizeof(custom_data));
-    cdata->window = window;
-    cdata->area   = area;
+    cdata->id   = wf_id;
+    cdata->area = area;
 
     auto wdata = std::make_shared<window_data>();
 
