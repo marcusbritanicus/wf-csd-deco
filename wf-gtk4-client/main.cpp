@@ -124,6 +124,29 @@ static void clear_group_tabs(uint32_t group_id);
 static void reparent_group(uint32_t group_id, window_data *last_parent);
 static void refresh_group(uint32_t group_id);
 
+int get_box_children_count(GtkWidget *box)
+{
+    int count = 0;
+    GtkWidget *child = gtk_widget_get_first_child(box);
+
+    while (child)
+    {
+        count++;
+        child = gtk_widget_get_next_sibling(child);
+    }
+
+    return count;
+}
+
+static void clear_box(GtkWidget *box)
+{
+    GtkWidget *child;
+    while ((child = gtk_widget_get_first_child(box)) != NULL)
+    {
+        gtk_box_remove(GTK_BOX(box), child);
+    }
+}
+
 static void on_button_released(GtkGestureClick *gesture,
     int n_press,
     double x,
@@ -132,11 +155,6 @@ static void on_button_released(GtkGestureClick *gesture,
 {
     auto wdata    = (window_data*)user_data;
     auto group_id = wdata->group.id;
-
-    if (!group_id)
-    {
-        return;
-    }
 
     clear_group_tabs(group_id);
 
@@ -160,7 +178,11 @@ static void on_button_released(GtkGestureClick *gesture,
 
     wdata->group.id = 0;
 
-    add_tab_button(wdata, wdata);
+    if (group_id)
+    {
+        add_tab_button(wdata, wdata);
+    }
+
     refresh_group(group_id);
     ungroup_window(wdata->wf_id);
 }
@@ -189,15 +211,6 @@ static void add_tab_button(window_data *wdata, window_data *cdata)
     gtk_widget_add_controller(button, GTK_EVENT_CONTROLLER(click_gesture));
 
     gtk_box_append(GTK_BOX(wdata->tab_box), button);
-}
-
-static void clear_box(GtkWidget *box)
-{
-    GtkWidget *child;
-    while ((child = gtk_widget_get_first_child(box)) != NULL)
-    {
-        gtk_box_remove(GTK_BOX(box), child);
-    }
 }
 
 static void clear_group_tabs(uint32_t group_id)
@@ -276,6 +289,16 @@ static void refresh_group(uint32_t group_id)
             {
                 add_tab_button(wdata.second.get(), cdata.get());
             }
+        }
+    }
+
+    for (auto cdata : win_data)
+    {
+        if (get_box_children_count(cdata.second->tab_box) == 1)
+        {
+            clear_box(cdata.second->tab_box);
+            cdata.second->group.id = 0;
+            add_tab_button(cdata.second.get(), cdata.second.get());
         }
     }
 }
