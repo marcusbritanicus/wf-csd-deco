@@ -297,7 +297,9 @@ static void refresh_group(uint32_t group_id)
         if (get_box_children_count(cdata.second->tab_box) == 1)
         {
             clear_box(cdata.second->tab_box);
-            cdata.second->group.id = 0;
+            cdata.second->group.id     = 0;
+            cdata.second->group.parent = false;
+            cdata.second->group.order.clear();
             add_tab_button(cdata.second.get(), cdata.second.get());
         }
     }
