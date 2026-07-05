@@ -239,13 +239,13 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
 
         LOGD("Size is ", wf::dimensions(box), " state is ", (int)deco_state);
 
+        auto vg = wf::toplevel_cast(target_view)->get_geometry();
         if (wf::dimensions(box) != committed)
         {
             LOGI(wf::dimensions(box), " != ", committed);
             committed = wf::dimensions(box);
             adjust_target_geometry();
-            auto vg = wf::toplevel_cast(target_view)->get_geometry();
-            auto min_width = 275;
+            auto min_width = 300;
             if (target_view->get_wlr_surface() && (box.width < min_width))
             {
                 if (wlr_xwayland_surface_try_from_wlr_surface(target_view->get_wlr_surface()))
@@ -253,7 +253,8 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
                     LOGD("Adjusting target on deco commit: width: ", box.width, " < ", min_width);
                     wlr_xwayland_surface_configure(wlr_xwayland_surface_try_from_wlr_surface(target_view->
                         get_wlr_surface()),
-                        vg.x, vg.y, min_width - 1, vg.height - (margin_top + margin_bottom) / 2 - 9);
+                        vg.x, vg.y, std::max(min_width - 11.0, vg.width),
+                        vg.height - (margin_top + margin_bottom) / 2 - 9);
                 }
             }
         }
@@ -266,14 +267,12 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
 
           case gtk4_decoration_tx_state::TENTATIVE:
             // Client commits twice?
-        {
-            auto vg = wf::toplevel_cast(target_view)->get_geometry();
             if (use_csd && (wf::dimensions(box) != wf::dimensions(vg)))
             {
                 wlr_xdg_toplevel_set_size(toplevel, vg.width, vg.height);
             }
-        }
-        break;
+
+            break;
 
           case gtk4_decoration_tx_state::START:
             deco_state = gtk4_decoration_tx_state::TENTATIVE;
