@@ -148,7 +148,7 @@ static const std::string gtk_decorator_prefix = "__wf_decorator:";
 wl_resource *decorator_resource = NULL;
 wl_listener deco_client_destroy_listener;
 std::vector<std::shared_ptr<wf::scene::wlr_surface_node_t>> deco_nodes;
-void do_ungroup_window(wl_client*, struct wl_resource*, uint32_t id);
+void ungroup_window(wl_client*, struct wl_resource*, uint32_t id, bool closing);
 
 class gtk4_decoration_object_t : public wf::txn::transaction_object_t
 {
@@ -507,7 +507,7 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
 
     void handle_destroy()
     {
-        do_ungroup_window(NULL, NULL, target_view->get_id());
+        ungroup_window(NULL, NULL, target_view->get_id(), true);
         if (decorator_resource)
         {
             wf_decorator_manager_send_destroy_decoration(decorator_resource, target_view->get_id());
@@ -813,7 +813,7 @@ void do_select_window(wl_client*, struct wl_resource*, uint32_t select_id)
     }
 }
 
-void do_ungroup_window(wl_client*, struct wl_resource*, uint32_t id)
+void ungroup_window(wl_client*, struct wl_resource*, uint32_t id, bool closing)
 {
     wayfire_view view = nullptr;
     for (auto& v : wf::get_core().get_all_views())
@@ -853,7 +853,10 @@ void do_ungroup_window(wl_client*, struct wl_resource*, uint32_t id)
         return;
     }
 
-    wf::toplevel_cast(view)->move(rg.x, rg.y);
+    if (!closing)
+    {
+        wf::toplevel_cast(view)->move(rg.x, rg.y);
+    }
 
     while (!view->get_root_node()->is_enabled())
     {
@@ -895,6 +898,11 @@ void do_ungroup_window(wl_client*, struct wl_resource*, uint32_t id)
             wf::scene::set_node_enabled(unhide_me->get_root_node(), true);
         }
     }
+}
+
+void do_ungroup_window(wl_client*, struct wl_resource*, uint32_t id)
+{
+    ungroup_window(NULL, NULL, id, false);
 }
 
 const struct wf_decorator_manager_interface decorator_implementation =
@@ -959,7 +967,7 @@ class gtk4_decoration_plugin : public wf::plugin_interface_t
     wf::signal::connection_t<wf::view_geometry_changed_signal> on_view_geometry_changed =
         [=] (wf::view_geometry_changed_signal *ev)
     {
-        if (ev->view->role != wf::VIEW_ROLE_TOPLEVEL)
+        if ((ev->view->role != wf::VIEW_ROLE_TOPLEVEL) || !ev->view->is_mapped())
         {
             return;
         }
