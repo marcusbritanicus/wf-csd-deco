@@ -414,6 +414,11 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
             size_updated();
         });
 
+        on_deco_destroy.set_callback([=] (void*)
+        {
+            handle_destroy();
+        });
+
         on_target_destroy.set_callback([=] (void*)
         {
             handle_destroy();
@@ -478,6 +483,7 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
         on_new_popup.connect(&wlr_xdg_surface_try_from_wlr_surface(
             deco_node->get_surface())->client->shell->events.new_popup);
         on_commit.connect(&toplevel->base->surface->events.commit);
+        on_deco_destroy.connect(&toplevel->events.destroy);
         if (wlr_xdg_toplevel_try_from_wlr_surface(target_view->get_wlr_surface()))
         {
             on_request_target_maximize.connect(&wlr_xdg_toplevel_try_from_wlr_surface(target_view->
@@ -504,6 +510,7 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
         }
 
         on_commit.disconnect();
+        on_deco_destroy.disconnect();
         on_target_destroy.disconnect();
         on_target_unmapped.disconnect();
         on_new_popup.disconnect();
@@ -619,7 +626,7 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
     wlr_xdg_toplevel *toplevel;
     decoration_node_t deco_node;
 
-    wf::wl_listener_wrapper on_commit, on_target_destroy, on_new_popup;
+    wf::wl_listener_wrapper on_commit, on_deco_destroy, on_target_destroy, on_new_popup;
     wf::wl_listener_wrapper on_request_move, on_request_resize, on_request_minimize;
     wf::wl_listener_wrapper on_request_deco_maximize, on_request_target_maximize;
     gtk4_decoration_tx_state deco_state = gtk4_decoration_tx_state::STABLE;
