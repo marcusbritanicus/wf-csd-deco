@@ -51,7 +51,6 @@ void registry_add_object(void*, struct wl_registry *registry, uint32_t name,
             (wf_decorator_manager*)wl_registry_bind(registry, name, &wf_decorator_manager_interface, 1u);
 
         wf_decorator_manager_add_listener(decorator_manager, &decorator_listener, NULL);
-        wl_registry_destroy(registry);
     }
 }
 

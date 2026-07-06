@@ -943,6 +943,12 @@ void unbind_decorator(wl_resource*)
 
 static void handle_deco_client_destroy(struct wl_listener *listener, void *data)
 {
+    LOGD("handle_deco_client_destroy");
+    if (decorator_resource)
+    {
+        wl_list_remove(&deco_client_destroy_listener.link);
+    }
+
     unbind_decorator(NULL);
     for (auto & node : deco_nodes)
     {
@@ -955,6 +961,22 @@ static void handle_deco_client_destroy(struct wl_listener *listener, void *data)
     }
 
     deco_nodes.clear();
+    for (auto & v : wf::get_core().get_all_views())
+    {
+        if (!wf::toplevel_cast(v))
+        {
+            continue;
+        }
+
+        auto data = wf::toplevel_cast(v)->toplevel()->get_data<gtk4_toplevel_custom_data>();
+        if (!data || !data->decoration)
+        {
+            continue;
+        }
+
+        data->decoration->handle_destroy();
+        v->damage();
+    }
 }
 
 void bind_decorator(wl_client *client, void*, uint32_t, uint32_t id)
@@ -962,11 +984,12 @@ void bind_decorator(wl_client *client, void*, uint32_t, uint32_t id)
     LOGI("Binding wf-decorator");
     auto resource = wl_resource_create(client, &wf_decorator_manager_interface, 1, id);
 
-    /* TODO: track active clients */
     wl_resource_set_implementation(resource, &decorator_implementation, NULL, NULL);
     decorator_resource = resource;
+
     deco_client_destroy_listener.notify = handle_deco_client_destroy;
     wl_client_add_destroy_listener(client, &deco_client_destroy_listener);
+
     for (auto & view : wf::get_core().get_all_views())
     {
         if (!wf::toplevel_cast(view) || !view->is_mapped())
@@ -1230,6 +1253,17 @@ class gtk4_decoration_plugin : public wf::plugin_interface_t
         wf::get_core().connect(&on_pre_map);
         wf::get_core().connect(&on_view_geometry_changed);
         wf::get_core().tx_manager->connect(&on_new_tx);
+    }
+
+    void fini() override
+    {
+        handle_deco_client_destroy(0, 0);
+        wl_global_remove(decorator_global);
+        on_mapped.disconnect();
+        on_pre_map.disconnect();
+        on_view_geometry_changed.disconnect();
+        on_new_tx.disconnect();
+        wl_global_destroy(decorator_global);
     }
 };
 
