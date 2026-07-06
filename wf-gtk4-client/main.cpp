@@ -26,6 +26,15 @@ static void on_button_released(GtkGestureClick *gesture,
 
 static gboolean on_close_request(GtkWindow *window, gpointer data)
 {
+    auto wdata = (window_data*)data;
+
+    close_request(wdata->wf_id);
+
+    return true;
+}
+
+static gboolean close_window(GtkWindow *window, gpointer data)
+{
     GtkWidget *win = (GtkWidget*)data;
     auto it = std::find_if(view_to_decor.begin(), view_to_decor.end(),
         [&win] (const std::pair<uint32_t, GtkWidget*>& element)
@@ -446,6 +455,7 @@ GtkWidget *create_deco_window(uint32_t wf_id)
     win_data[window] = wdata;
 
     cdata->size_allocate_signal = g_signal_connect(area, "resize", G_CALLBACK(on_area_resized), cdata);
+    g_signal_connect(window, "close-request", G_CALLBACK(on_close_request), wdata.get());
 
     gtk_window_present(GTK_WINDOW(window));
 
@@ -457,7 +467,7 @@ void destroy_deco_window(uint32_t wf_id)
     auto window = view_to_decor[wf_id];
     if (window)
     {
-        on_close_request(GTK_WINDOW(window), win_data[window].get());
+        close_window(GTK_WINDOW(window), win_data[window].get());
     }
 }
 

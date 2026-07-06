@@ -31,6 +31,7 @@ void destroy_deco_window(uint32_t wf_id);
 void set_title(GtkWidget *window, const char *title);
 void set_app_id(GtkWidget *window, const char *app_id);
 void window_destroyed(GtkWidget *window);
+void close_request(uint32_t wf_id);
 
 void update_borders(uint32_t id, uint32_t top, uint32_t bottom, uint32_t left, uint32_t right);
 void group_windows(uint32_t parent_id, uint32_t child_id);

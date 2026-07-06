@@ -414,15 +414,6 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
             size_updated();
         });
 
-        on_deco_destroy.set_callback([=] (void*)
-        {
-            handle_destroy();
-            if (decorator_resource)
-            {
-                target_view->close();
-            }
-        });
-
         on_target_destroy.set_callback([=] (void*)
         {
             handle_destroy();
@@ -487,7 +478,6 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
         on_new_popup.connect(&wlr_xdg_surface_try_from_wlr_surface(
             deco_node->get_surface())->client->shell->events.new_popup);
         on_commit.connect(&toplevel->base->surface->events.commit);
-        on_deco_destroy.connect(&toplevel->events.destroy);
         if (wlr_xdg_toplevel_try_from_wlr_surface(target_view->get_wlr_surface()))
         {
             on_request_target_maximize.connect(&wlr_xdg_toplevel_try_from_wlr_surface(target_view->
@@ -514,7 +504,6 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
         }
 
         on_commit.disconnect();
-        on_deco_destroy.disconnect();
         on_target_destroy.disconnect();
         on_target_unmapped.disconnect();
         on_new_popup.disconnect();
@@ -630,7 +619,7 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
     wlr_xdg_toplevel *toplevel;
     decoration_node_t deco_node;
 
-    wf::wl_listener_wrapper on_commit, on_deco_destroy, on_target_destroy, on_new_popup;
+    wf::wl_listener_wrapper on_commit, on_target_destroy, on_new_popup;
     wf::wl_listener_wrapper on_request_move, on_request_resize, on_request_minimize;
     wf::wl_listener_wrapper on_request_deco_maximize, on_request_target_maximize;
     gtk4_decoration_tx_state deco_state = gtk4_decoration_tx_state::STABLE;
@@ -905,12 +894,38 @@ void do_ungroup_window(wl_client*, struct wl_resource*, uint32_t id)
     ungroup_window(NULL, NULL, id, false);
 }
 
+void do_close_request(wl_client*, struct wl_resource*, uint32_t id)
+{
+    wayfire_view view = nullptr;
+    for (auto& v : wf::get_core().get_all_views())
+    {
+        if (v->role != wf::VIEW_ROLE_TOPLEVEL)
+        {
+            continue;
+        }
+
+        if (v->get_id() == id)
+        {
+            view = v;
+            break;
+        }
+    }
+
+    if (!view)
+    {
+        return;
+    }
+
+    view->close();
+}
+
 const struct wf_decorator_manager_interface decorator_implementation =
 {
     .update_borders = do_update_borders,
     .group_windows  = do_group_windows,
     .select_window  = do_select_window,
-    .ungroup_window = do_ungroup_window
+    .ungroup_window = do_ungroup_window,
+    .close_request  = do_close_request
 };
 
 void unbind_decorator(wl_resource*)
