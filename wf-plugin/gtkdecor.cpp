@@ -1033,6 +1033,18 @@ void bind_decorator(wl_client *client, void*, uint32_t, uint32_t id)
             wf::get_core().protocols.decorator_manager,
             WLR_SERVER_DECORATION_MANAGER_MODE_CLIENT);
         wf_decorator_manager_send_create_new_decoration(decorator_resource, view->get_id());
+
+        auto data = wf::toplevel_cast(view)->toplevel()->get_data_safe<gtk4_toplevel_custom_data>();
+
+        if ((data->margin_offset.x == 0) && (data->margin_offset.y == 0))
+        {
+            auto bg = view->get_bounding_box();
+            auto vg = wf::toplevel_cast(view)->get_geometry();
+            data->margin_offset.x = vg.x - bg.x;
+            data->margin_offset.y = vg.y - bg.y;
+        }
+
+        LOGD("margin_offsets: ", data->margin_offset.x, ",", data->margin_offset.y);
     }
 }
 
