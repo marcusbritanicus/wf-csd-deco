@@ -244,18 +244,6 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
             LOGD(wf::dimensions(box), " != ", committed);
             committed = wf::dimensions(box);
             adjust_target_geometry();
-            auto min_width = 300;
-            if (target_view->get_wlr_surface() && (box.width < min_width))
-            {
-                if (wlr_xwayland_surface_try_from_wlr_surface(target_view->get_wlr_surface()))
-                {
-                    LOGD("Adjusting target on deco commit: width: ", box.width, " < ", min_width);
-                    wlr_xwayland_surface_configure(wlr_xwayland_surface_try_from_wlr_surface(target_view->
-                        get_wlr_surface()),
-                        vg.x, vg.y, std::max(min_width - 11.0, vg.width),
-                        vg.height - (margin_top + margin_bottom) / 2 - 9);
-                }
-            }
         }
 
         switch (this->deco_state)
@@ -342,15 +330,15 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
 
     void adjust_target_geometry()
     {
-        auto desired = wf::dimensions(deco_node->get_bounding_box());
-        auto tg = wf::dimensions(toplevel->base->geometry);
+        auto desired = wf::dimensions(toplevel->base->geometry);
+        auto tg = wf::dimensions(wf::toplevel_cast(target_view)->get_geometry());
         if (!target_view->get_wlr_surface())
         {
             return;
         }
 
         desired.width  -= margin_left + margin_right;
-        desired.height -= margin_top + margin_bottom + 2;
+        desired.height -= margin_top + margin_bottom + 1;
         desired.width   = std::max(tg.width, desired.width);
         desired.height  = std::max(tg.height, desired.height);
         desired.width   = std::max(desired.width, wf::toplevel_cast(
@@ -361,12 +349,14 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
         if (desired != tg)
         {
             LOGD("Adjusting target on deco commit: ", desired, " != ", tg);
+            tg.width   = std::max(tg.width, 369);
+            tg.height -= margin_top - margin_bottom + 1;
             if (wlr_xwayland_surface_try_from_wlr_surface(target_view->get_wlr_surface()))
             {
                 auto vg = wf::toplevel_cast(target_view)->get_geometry();
                 wlr_xwayland_surface_configure(wlr_xwayland_surface_try_from_wlr_surface(target_view->
                     get_wlr_surface()),
-                    vg.x, vg.y, desired.width, desired.height);
+                    vg.x, vg.y, tg.width, tg.height);
             } else
             {
                 wlr_xdg_toplevel_set_size(wlr_xdg_toplevel_try_from_wlr_surface(target_view->
