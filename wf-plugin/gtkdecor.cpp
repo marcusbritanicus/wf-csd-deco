@@ -147,7 +147,6 @@ class gtk4_mask_node_t : public wf::scene::floating_inner_node_t
 static const std::string gtk_decorator_prefix = "__wf_decorator:";
 wl_resource *decorator_resource = NULL;
 wl_listener deco_client_destroy_listener;
-std::vector<std::shared_ptr<wf::scene::wlr_surface_node_t>> deco_nodes;
 void ungroup_window(wl_client*, struct wl_resource*, uint32_t id, bool closing);
 
 class gtk4_decoration_object_t : public wf::txn::transaction_object_t
@@ -242,7 +241,7 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
         auto vg = wf::toplevel_cast(target_view)->get_geometry();
         if (wf::dimensions(box) != committed)
         {
-            LOGI(wf::dimensions(box), " != ", committed);
+            LOGD(wf::dimensions(box), " != ", committed);
             committed = wf::dimensions(box);
             adjust_target_geometry();
             auto min_width = 300;
@@ -590,7 +589,9 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
     bool use_csd     = false;
     bool borders_set = false;
     wayfire_view target_view;
+    decoration_node_t deco_node;
     wf::point_t ungroup_restore_position;
+    std::weak_ptr<gtk4_mask_node_t> mask_node;
     std::shared_ptr<wf::scene::translation_node_t> root_node;
 
   private:
@@ -600,7 +601,11 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
     void recompute_mask()
     {
         auto masked = mask_node.lock();
-        wf::dassert(masked != nullptr, "Masked node does not exist anymore??");
+        if (!masked)
+        {
+            LOGD("Masked node does not exist anymore??");
+            return;
+        }
 
         auto bbox = deco_node->get_bounding_box();
 
@@ -621,10 +626,8 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
     wf::point_t margin_offset;
 
     wf::scene::surface_state_t pending_state;
-    std::weak_ptr<gtk4_mask_node_t> mask_node;
 
     wlr_xdg_toplevel *toplevel;
-    decoration_node_t deco_node;
 
     wf::wl_listener_wrapper on_commit, on_deco_destroy, on_target_destroy, on_new_popup;
     wf::wl_listener_wrapper on_request_move, on_request_resize, on_request_minimize;
@@ -941,26 +944,24 @@ void unbind_decorator(wl_resource*)
     decorator_resource = NULL;
 }
 
-static void handle_deco_client_destroy(struct wl_listener *listener, void *data)
+static void handle_deco_client_destroy(struct wl_listener*, void*)
 {
     LOGD("handle_deco_client_destroy");
     if (decorator_resource)
     {
         wl_list_remove(&deco_client_destroy_listener.link);
+
+        for (auto & v : wf::get_core().get_all_views())
+        {
+            if (!wf::toplevel_cast(v))
+            {
+                continue;
+            }
+
+            ungroup_window(NULL, NULL, v->get_id(), false);
+        }
     }
 
-    unbind_decorator(NULL);
-    for (auto & node : deco_nodes)
-    {
-        wf::scene::remove_child(node);
-    }
-
-    for (auto & output : wf::get_core().output_layout->get_outputs())
-    {
-        output->render->damage_whole();
-    }
-
-    deco_nodes.clear();
     for (auto & v : wf::get_core().get_all_views())
     {
         if (!wf::toplevel_cast(v))
@@ -975,8 +976,39 @@ static void handle_deco_client_destroy(struct wl_listener *listener, void *data)
         }
 
         data->decoration->handle_destroy();
+
+        auto mask_node = data->decoration->mask_node.lock();
+        if (mask_node)
+        {
+            wf::scene::remove_child(mask_node);
+            mask_node.reset();
+        }
+
+        auto deco_node = data->decoration->deco_node;
+        if (deco_node)
+        {
+            wf::scene::remove_child(deco_node);
+            deco_node.reset();
+        }
+
+        auto root_node = data->decoration->root_node;
+        if (root_node)
+        {
+            wf::scene::remove_child(root_node);
+            root_node.reset();
+        }
+
+        wf::scene::damage_node(v->get_root_node(), v->get_bounding_box());
+        wf::scene::update(v->get_root_node(), 0xFF);
         v->damage();
     }
+
+    for (auto & output : wf::get_core().output_layout->get_outputs())
+    {
+        output->render->damage_whole();
+    }
+
+    unbind_decorator(NULL);
 }
 
 void bind_decorator(wl_client *client, void*, uint32_t, uint32_t id)
@@ -1107,7 +1139,6 @@ class gtk4_decoration_plugin : public wf::plugin_interface_t
         decoration_root_node->set_children_list({mask_node});
 
         auto deco_surf = std::make_shared<wf::scene::wlr_surface_node_t>(surface, false);
-        deco_nodes.push_back(deco_surf);
         data->decoration = std::make_shared<gtk4_decoration_object_t>(
             deco_toplevel, target, deco_surf, mask_node,
             target->toplevel(), decoration_root_node);
@@ -1180,11 +1211,10 @@ class gtk4_decoration_plugin : public wf::plugin_interface_t
 
             auto bg = ev->view->get_bounding_box();
             auto vg = wf::toplevel_cast(ev->view)->get_geometry();
-            LOGI(bg);
-            LOGI(vg);
             data->margin_offset.x = vg.x - bg.x;
             data->margin_offset.y = vg.y - bg.y;
             LOGD("margin_offsets: ", data->margin_offset.x, ",", data->margin_offset.y);
+
             wf::scene::set_node_enabled(ev->view->get_root_node(), false);
             wf::scene::set_node_enabled(ev->view->get_root_node(), false);
         }
