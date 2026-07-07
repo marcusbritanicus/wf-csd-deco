@@ -156,13 +156,8 @@ static void clear_box(GtkWidget *box)
     }
 }
 
-static void on_button_released(GtkGestureClick *gesture,
-    int n_press,
-    double x,
-    double y,
-    gpointer user_data)
+static void ungroup(window_data *wdata)
 {
-    auto wdata    = (window_data*)user_data;
     auto group_id = wdata->group.id;
 
     clear_group_tabs(group_id);
@@ -196,19 +191,26 @@ static void on_button_released(GtkGestureClick *gesture,
     ungroup_window(wdata->wf_id);
 }
 
+static void on_button_released(GtkGestureClick *gesture,
+    int n_press,
+    double x,
+    double y,
+    gpointer user_data)
+{
+    auto wdata = (window_data*)user_data;
+    ungroup(wdata);
+}
+
 static void add_tab_button(window_data *wdata, window_data *cdata)
 {
     GtkWidget *button = gtk_button_new_from_icon_name(cdata->app_id.c_str());
 
-    if (!cdata->group.id)
-    {
-        GtkDragSource *drag_source = gtk_drag_source_new();
-        gtk_drag_source_set_actions(drag_source, GdkDragAction(GDK_ACTION_COPY | GDK_ACTION_MOVE));
-        g_signal_connect(drag_source, "prepare", G_CALLBACK(drag_prepare_cb), wdata);
-        g_signal_connect(drag_source, "drag-begin", G_CALLBACK(drag_begin_cb), wdata);
-        g_signal_connect(drag_source, "drag-end", G_CALLBACK(drag_end_cb), NULL);
-        gtk_widget_add_controller(button, GTK_EVENT_CONTROLLER(drag_source));
-    }
+    GtkDragSource *drag_source = gtk_drag_source_new();
+    gtk_drag_source_set_actions(drag_source, GdkDragAction(GDK_ACTION_COPY | GDK_ACTION_MOVE));
+    g_signal_connect(drag_source, "prepare", G_CALLBACK(drag_prepare_cb), wdata);
+    g_signal_connect(drag_source, "drag-begin", G_CALLBACK(drag_begin_cb), wdata);
+    g_signal_connect(drag_source, "drag-end", G_CALLBACK(drag_end_cb), NULL);
+    gtk_widget_add_controller(button, GTK_EVENT_CONTROLLER(drag_source));
 
     GtkGesture *click_gesture = gtk_gesture_click_new();
     g_signal_connect(click_gesture, "pressed", G_CALLBACK(on_button_pressed), cdata);
@@ -336,13 +338,9 @@ static gboolean drop_cb(GtkDropTarget *target,
         }
 
         g_print("Dropped on target, success!\n");
-        group_windows(drop_target_data->wf_id, wf_id);
         auto drag_source_data = win_data[view_to_decor[wf_id]];
-        if (drag_source_data->group.id)
-        {
-            g_print("Drag source already grouped, ignoring\n");
-            return false;
-        }
+        ungroup(drag_source_data.get());
+        group_windows(drop_target_data->wf_id, wf_id);
 
         if (drop_target_data->group.id)
         {
