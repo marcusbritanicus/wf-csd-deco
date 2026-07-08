@@ -731,6 +731,8 @@ void do_group_windows(wl_client*, struct wl_resource*, uint32_t parent_id, uint3
         wf::scene::set_node_enabled(child->get_root_node(), false);
     }
 
+    wf::get_core().default_wm->focus_raise_view(parent);
+
     auto cg = wf::toplevel_cast(child)->get_geometry();
     child_data->decoration->ungroup_restore_position = {cg.x, cg.y};
     auto vg = wf::toplevel_cast(parent)->get_geometry();
