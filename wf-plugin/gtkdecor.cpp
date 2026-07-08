@@ -50,8 +50,6 @@
 #include <wayfire/unstable/wlr-view-events.hpp>
 #include <wayfire/unstable/translation-node.hpp>
 
-void create_xdg_popup(wlr_xdg_popup *popup);
-
 wf::decoration_margins_t deco_margins =
 {
     .left   = 0,
@@ -67,6 +65,14 @@ std::ostream& operator <<(std::ostream& out, const wf::dimensions_t& dims)
     out << dims.width << "x" << dims.height;
     return out;
 }
+
+static const std::string deco_transformer_name = "csd-deco-transformer";
+using namespace wf::animation;
+class deco_animation_t : public duration_t
+{
+  public:
+    using duration_t::duration_t;
+};
 
 /**
  * A node which cuts out a part of its children (visually).
@@ -380,6 +386,8 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
         this->mask_node   = mask;
         this->decorated_toplevel = decorated_toplevel;
         this->root_node = root_node;
+        /* TODO: Make duration configurable */
+        this->progression = deco_animation_t(wf::create_option<int>(400));
 
         on_commit.set_callback([=] (void*)
         {
@@ -443,24 +451,6 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
                 !wf::toplevel_cast(target_view)->minimized);
         });
 
-        on_new_popup.set_callback([=] (void *data)
-        {
-            auto popup = (decltype(toplevel->base->popup))data;
-
-            if (!popup)
-            {
-                return;
-            }
-
-            if (deco_node->get_surface() != popup->parent)
-            {
-                return;
-            }
-
-            popup->parent = target_view->get_wlr_surface();
-            create_xdg_popup(popup);
-        });
-
         on_request_move.connect(&toplevel->events.request_move);
         on_request_resize.connect(&toplevel->events.request_resize);
         on_request_deco_maximize.connect(&toplevel->events.request_maximize);
@@ -469,8 +459,6 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
         target_view->connect(&on_view_tiled);
         target_view->connect(&on_target_unmapped);
         on_request_minimize.connect(&toplevel->events.request_minimize);
-        on_new_popup.connect(&wlr_xdg_surface_try_from_wlr_surface(
-            deco_node->get_surface())->client->shell->events.new_popup);
         on_commit.connect(&toplevel->base->surface->events.commit);
         on_deco_destroy.connect(&toplevel->events.destroy);
         if (wlr_xdg_toplevel_try_from_wlr_surface(target_view->get_wlr_surface()))
@@ -502,7 +490,6 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
         on_deco_destroy.disconnect();
         on_target_destroy.disconnect();
         on_target_unmapped.disconnect();
-        on_new_popup.disconnect();
         on_request_move.disconnect();
         on_request_resize.disconnect();
         on_request_minimize.disconnect();
@@ -566,6 +553,100 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
         }
     };
 
+    wf::effect_hook_t animation_driver_hook = [=] ()
+    {
+        target_view->damage();
+
+        auto tr = wf::ensure_named_transformer<wf::scene::view_2d_transformer_t>(
+            target_view, wf::TRANSFORMER_2D, deco_transformer_name, target_view);
+
+        auto progress = progression.progress();
+        target_view->get_transformed_node()->begin_transform_update();
+        tr->alpha = 1.0 - progress;
+        if (group_id)
+        {
+            tr->translation_x = (from_geometry.x - to_geometry.x) * (1.0 - progress);
+            tr->translation_y = (from_geometry.y - to_geometry.y) * (1.0 - progress);
+        } else
+        {
+            tr->translation_x = (from_geometry.x - to_geometry.x) * progress;
+            tr->translation_y = (from_geometry.y - to_geometry.y) * progress;
+        }
+
+        target_view->get_transformed_node()->end_transform_update();
+
+        target_view->damage();
+
+        if (!progression.running())
+        {
+            unset_hook(target_view->get_output());
+
+            if (group_id)
+            {
+                while (target_view->get_root_node()->is_enabled())
+                {
+                    wf::scene::set_node_enabled(target_view->get_root_node(), false);
+                }
+            }
+        }
+    };
+
+    void set_hook(wf::output_t *output, wf::geometry_t from_geometry, wf::geometry_t to_geometry)
+    {
+        if (!output)
+        {
+            return;
+        }
+
+        if (!hook_set)
+        {
+            output->render->add_effect(&animation_driver_hook,
+                wf::OUTPUT_EFFECT_PRE);
+        }
+
+        hook_set = true;
+
+        this->from_geometry = from_geometry;
+        this->to_geometry   = to_geometry;
+
+        if (group_id)
+        {
+            if (!progression.get_direction())
+            {
+                progression.reverse();
+            }
+
+            progression.start();
+        } else
+        {
+            if (progression.running())
+            {
+                progression.reverse();
+            } else
+            {
+                if (progression.get_direction())
+                {
+                    progression.reverse();
+                }
+
+                progression.start();
+            }
+        }
+    }
+
+    void unset_hook(wf::output_t *output)
+    {
+        if (!hook_set || !output)
+        {
+            return;
+        }
+
+        hook_set = false;
+
+        output->render->rem_effect(&animation_driver_hook);
+        target_view->get_transformed_node()->rem_transformer(deco_transformer_name);
+    }
+
     void set_margins(int top, int bottom, int left, int right, wf::point_t offset)
     {
         this->margin_top    = top;
@@ -619,7 +700,11 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
 
     wlr_xdg_toplevel *toplevel;
 
-    wf::wl_listener_wrapper on_commit, on_deco_destroy, on_target_destroy, on_new_popup;
+    bool hook_set = false;
+    deco_animation_t progression;
+    wf::geometry_t from_geometry, to_geometry;
+
+    wf::wl_listener_wrapper on_commit, on_deco_destroy, on_target_destroy;
     wf::wl_listener_wrapper on_request_move, on_request_resize, on_request_minimize;
     wf::wl_listener_wrapper on_request_deco_maximize, on_request_target_maximize;
     gtk4_decoration_tx_state deco_state = gtk4_decoration_tx_state::STABLE;
@@ -708,7 +793,7 @@ void do_group_windows(wl_client*, struct wl_resource*, uint32_t parent_id, uint3
     auto parent_data = wf::toplevel_cast(parent)->toplevel()->get_data<gtk4_toplevel_custom_data>();
     auto child_data  = wf::toplevel_cast(child)->toplevel()->get_data<gtk4_toplevel_custom_data>();
 
-    if (!parent_data || !child_data)
+    if (!parent_data || !child_data || !parent_data->decoration || !child_data->decoration)
     {
         return;
     }
@@ -726,18 +811,17 @@ void do_group_windows(wl_client*, struct wl_resource*, uint32_t parent_id, uint3
         wf::scene::set_node_enabled(parent->get_root_node(), true);
     }
 
-    while (child->get_root_node()->is_enabled())
-    {
-        wf::scene::set_node_enabled(child->get_root_node(), false);
-    }
-
-    wf::get_core().default_wm->focus_raise_view(parent);
-
     auto cg = wf::toplevel_cast(child)->get_geometry();
     child_data->decoration->ungroup_restore_position = {cg.x, cg.y};
     auto vg = wf::toplevel_cast(parent)->get_geometry();
     parent_data->decoration->ungroup_restore_position = {vg.x, vg.y};
     wf::toplevel_cast(child)->move(vg.x, vg.y);
+    auto from_geometry = cg;
+    auto to_geometry   = wf::toplevel_cast(child)->get_geometry();
+    if (from_geometry != to_geometry)
+    {
+        child_data->decoration->set_hook(child->get_output(), from_geometry, to_geometry);
+    }
 }
 
 void do_select_window(wl_client*, struct wl_resource*, uint32_t select_id)
@@ -844,6 +928,8 @@ void ungroup_window(wl_client*, struct wl_resource*, uint32_t id, bool closing)
         return;
     }
 
+    auto from_geometry = wf::toplevel_cast(view)->get_geometry();
+
     if (!closing)
     {
         wf::toplevel_cast(view)->move(rg.x, rg.y);
@@ -855,6 +941,12 @@ void ungroup_window(wl_client*, struct wl_resource*, uint32_t id, bool closing)
     }
 
     wf::get_core().default_wm->focus_raise_view(view);
+
+    auto to_geometry = wf::toplevel_cast(view)->get_geometry();
+    if (from_geometry != to_geometry)
+    {
+        view_data->decoration->set_hook(view->get_output(), from_geometry, to_geometry);
+    }
 
     wayfire_view unhide_me = nullptr;
     uint64_t last_group_focused_timestamp = 0;
