@@ -340,10 +340,9 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
             return;
         }
 
-        desired.height -= margin_top + margin_bottom + 1;
-        desired.width   = std::max(tg.width, desired.width);
-        desired.height  = std::max(tg.height, desired.height);
-        desired.width   = std::max(desired.width, wf::toplevel_cast(
+        desired.width  = std::max(tg.width, desired.width);
+        desired.height = std::max(tg.height, desired.height);
+        desired.width  = std::max(desired.width, wf::toplevel_cast(
             target_view)->toplevel()->get_min_size().width);
         desired.height = std::max(desired.height, wf::toplevel_cast(
             target_view)->toplevel()->get_min_size().height);
