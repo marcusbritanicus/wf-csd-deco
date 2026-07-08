@@ -658,13 +658,14 @@ void do_update_borders(wl_client*, struct wl_resource*, uint32_t id, uint32_t to
 
     LOGD("do_update_borders: ", top, ", ", bottom, ", ", left, ", ", right);
 
+    int l = left, t = top;
     bool use_csd = data->decoration->use_csd;
     LOGI(use_csd);
 
     deco_margins.top = top - bottom + 1;
     data->decoration->set_margins(top, bottom, left, right, data->margin_offset);
-    data->decoration->root_node->set_offset({double(use_csd ? -(left - data->margin_offset.x) : -left),
-        double(use_csd ? -(top - data->margin_offset.y) : -top)});
+    data->decoration->root_node->set_offset({double(use_csd ? -(l - data->margin_offset.x) : -l),
+        double(use_csd ? -(t - data->margin_offset.y) : -t)});
     wf::get_core().tx_manager->schedule_object(wf::toplevel_cast(data->decoration->target_view)->toplevel());
 }
 
