@@ -828,7 +828,7 @@ void ungroup_window(wl_client*, struct wl_resource*, uint32_t id, bool closing)
 
     auto view_data = wf::toplevel_cast(view)->toplevel()->get_data<gtk4_toplevel_custom_data>();
 
-    if (!view_data)
+    if (!view_data || !view_data->decoration)
     {
         return;
     }
@@ -866,7 +866,7 @@ void ungroup_window(wl_client*, struct wl_resource*, uint32_t id, bool closing)
         }
 
         auto data = wf::toplevel_cast(v)->toplevel()->get_data<gtk4_toplevel_custom_data>();
-        if (data)
+        if (data && data->decoration)
         {
             if (data->decoration->group_id == group_id)
             {
@@ -992,8 +992,6 @@ static void handle_deco_client_destroy(struct wl_listener*, void*)
             root_node.reset();
         }
 
-        wf::scene::damage_node(v->get_root_node(), v->get_bounding_box());
-        wf::scene::update(v->get_root_node(), 0xFF);
         v->damage();
     }
 
@@ -1044,6 +1042,8 @@ void bind_decorator(wl_client *client, void*, uint32_t, uint32_t id)
 
 class gtk4_decoration_plugin : public wf::plugin_interface_t
 {
+    wf::option_wrapper_t<bool> decorate_csd{"gtk4-decorator/decorate_csd"};
+
   public:
     wl_global *decorator_global;
 
@@ -1208,11 +1208,6 @@ class gtk4_decoration_plugin : public wf::plugin_interface_t
         LOGD("Need decoration for ", ev->view);
         if (decorator_resource && !wf::toplevel_cast(ev->view)->toplevel()->pending().fullscreen)
         {
-            wlr_server_decoration_manager_set_default_mode(
-                wf::get_core().protocols.decorator_manager,
-                WLR_SERVER_DECORATION_MANAGER_MODE_CLIENT);
-            wf_decorator_manager_send_create_new_decoration(decorator_resource, ev->view->get_id());
-
             auto data = wf::toplevel_cast(ev->view)->toplevel()->get_data_safe<gtk4_toplevel_custom_data>();
 
             auto bg = ev->view->get_bounding_box();
@@ -1220,6 +1215,17 @@ class gtk4_decoration_plugin : public wf::plugin_interface_t
             data->margin_offset.x = vg.x - bg.x;
             data->margin_offset.y = vg.y - bg.y;
             LOGD("margin_offsets: ", data->margin_offset.x, ",", data->margin_offset.y);
+
+            if (!decorate_csd && !wf::toplevel_cast(ev->view)->should_be_decorated())
+            {
+                LOGD("No double decorations");
+                return;
+            }
+
+            wlr_server_decoration_manager_set_default_mode(
+                wf::get_core().protocols.decorator_manager,
+                WLR_SERVER_DECORATION_MANAGER_MODE_CLIENT);
+            wf_decorator_manager_send_create_new_decoration(decorator_resource, ev->view->get_id());
 
             wf::scene::set_node_enabled(ev->view->get_root_node(), false);
             wf::scene::set_node_enabled(ev->view->get_root_node(), false);
@@ -1243,8 +1249,11 @@ class gtk4_decoration_plugin : public wf::plugin_interface_t
                 // In that case, we should just set the correct margins
                 if (auto deco = toplevel->get_data<gtk4_toplevel_custom_data>())
                 {
-                    // One thing here: we hardcode the deco_margins. Ideally, these should come from a
-                    // protocol
+                    if (!deco->decoration)
+                    {
+                        continue;
+                    }
+
                     toplevel->pending().margins =
                         toplevel->pending().fullscreen ? wf::decoration_margins_t{0, 0, 0, 0} : deco_margins;
                     ev->tx->add_object(deco->decoration);
@@ -1289,6 +1298,69 @@ class gtk4_decoration_plugin : public wf::plugin_interface_t
         wf::get_core().connect(&on_pre_map);
         wf::get_core().connect(&on_view_geometry_changed);
         wf::get_core().tx_manager->connect(&on_new_tx);
+
+        decorate_csd.set_callback([=] ()
+        {
+            if (decorator_resource)
+            {
+                for (auto& v : wf::get_core().get_all_views())
+                {
+                    if (v->get_app_id() == "org.wf.sample-decorator")
+                    {
+                        continue;
+                    }
+
+                    if (v->role != wf::VIEW_ROLE_TOPLEVEL)
+                    {
+                        continue;
+                    }
+
+                    auto data = wf::toplevel_cast(v)->toplevel()->get_data<gtk4_toplevel_custom_data>();
+                    if (data && data->decoration && !wf::toplevel_cast(v)->should_be_decorated() &&
+                        !decorate_csd)
+                    {
+                        data->decoration->handle_destroy();
+
+                        auto mask_node = data->decoration->mask_node.lock();
+                        if (mask_node)
+                        {
+                            wf::scene::remove_child(mask_node);
+                            mask_node.reset();
+                        }
+
+                        auto deco_node = data->decoration->deco_node;
+                        if (deco_node)
+                        {
+                            wf::scene::remove_child(deco_node);
+                            deco_node.reset();
+                        }
+
+                        auto root_node = data->decoration->root_node;
+                        if (root_node)
+                        {
+                            wf::scene::remove_child(root_node);
+                            root_node.reset();
+                        }
+
+                        data->decoration.reset();
+                        data->decoration = nullptr;
+
+                        v->damage();
+                    }
+
+                    if (data && !data->decoration && decorate_csd)
+                    {
+                        wlr_server_decoration_manager_set_default_mode(
+                            wf::get_core().protocols.decorator_manager,
+                            WLR_SERVER_DECORATION_MANAGER_MODE_CLIENT);
+                        wf_decorator_manager_send_create_new_decoration(decorator_resource, v->get_id());
+
+                        wf::scene::set_node_enabled(v->get_root_node(), false);
+                        wf::scene::set_node_enabled(v->get_root_node(), false);
+                    }
+                }
+            }
+        });
     }
 
     void fini() override

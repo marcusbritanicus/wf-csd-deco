@@ -22,5 +22,6 @@ project_args = ['-DWLR_USE_UNSTABLE']
 add_project_arguments(project_args, language: ['cpp', 'c'])
 
 subdir('proto')
-subdir('wf-gtk4-client')
+subdir('metadata')
 subdir('wf-plugin')
+subdir('wf-gtk4-client')
