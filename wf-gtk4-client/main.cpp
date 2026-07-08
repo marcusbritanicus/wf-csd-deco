@@ -451,7 +451,8 @@ static gboolean on_scroll_cb(GtkEventControllerScroll *controller,
 GtkWidget *create_deco_window(uint32_t wf_id)
 {
     auto window = gtk_application_window_new(app);
-    gtk_window_set_default_size(GTK_WINDOW(window), 300, 300);
+    gtk_window_set_default_size(GTK_WINDOW(window), 400, 300);
+    gtk_widget_set_size_request(window, 400, 50);
     auto area = gtk_drawing_area_new();
     gtk_window_set_child(GTK_WINDOW(window), area);
     gtk_window_set_title(GTK_WINDOW(window), ("__wf_decorator:" + std::to_string(wf_id)).c_str());
