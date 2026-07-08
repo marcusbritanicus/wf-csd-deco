@@ -852,6 +852,8 @@ void ungroup_window(wl_client*, struct wl_resource*, uint32_t id, bool closing)
         wf::scene::set_node_enabled(view->get_root_node(), true);
     }
 
+    wf::get_core().default_wm->focus_raise_view(view);
+
     wayfire_view unhide_me = nullptr;
     auto last_group_focused_timestamp = 0;
     for (auto& v : wf::get_core().get_all_views())
