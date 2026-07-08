@@ -8,7 +8,6 @@ project(
 	default_options: [
 		'cpp_std=c++17',
         'c_std=c99',
-		'warning_level=2',
 		'werror=false',
 	],
 )

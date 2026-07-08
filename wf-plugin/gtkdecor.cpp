@@ -515,7 +515,7 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
         this->toplevel = nullptr;
     }
 
-    wf::signal::connection_t<wf::view_unmapped_signal> on_target_unmapped = [=] (wf::view_unmapped_signal *ev)
+    wf::signal::connection_t<wf::view_unmapped_signal> on_target_unmapped = [=] (wf::view_unmapped_signal*)
     {
         handle_destroy();
     };
@@ -538,13 +538,13 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
     }
 
     wf::signal::connection_t<wf::view_title_changed_signal> on_view_title_changed =
-        [=] (wf::view_title_changed_signal *ev)
+        [=] (wf::view_title_changed_signal*)
     {
         wf_decorator_manager_send_title_changed(decorator_resource,
             target_view->get_id(), target_view->get_title().c_str());
     };
 
-    wf::signal::connection_t<wf::view_tiled_signal> on_view_tiled = [=] (wf::view_tiled_signal *ev)
+    wf::signal::connection_t<wf::view_tiled_signal> on_view_tiled = [=] (wf::view_tiled_signal*)
     {
         handle_maximize();
     };
@@ -580,7 +580,7 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
     bool borders_set = false;
     wayfire_view target_view;
     decoration_node_t deco_node;
-    wf::point_t ungroup_restore_position;
+    wf::pointf_t ungroup_restore_position;
     std::weak_ptr<gtk4_mask_node_t> mask_node;
     std::shared_ptr<wf::scene::translation_node_t> root_node;
 
@@ -658,14 +658,13 @@ void do_update_borders(wl_client*, struct wl_resource*, uint32_t id, uint32_t to
 
     LOGD("do_update_borders: ", top, ", ", bottom, ", ", left, ", ", right);
 
-    int t = top, l = left;
     bool use_csd = data->decoration->use_csd;
     LOGI(use_csd);
 
     deco_margins.top = top - bottom + 1;
     data->decoration->set_margins(top, bottom, left, right, data->margin_offset);
-    data->decoration->root_node->set_offset({use_csd ? -(l - data->margin_offset.x) : -l,
-        use_csd ? -(t - data->margin_offset.y) : -t});
+    data->decoration->root_node->set_offset({double(use_csd ? -(left - data->margin_offset.x) : -left),
+        double(use_csd ? -(top - data->margin_offset.y) : -top)});
     wf::get_core().tx_manager->schedule_object(wf::toplevel_cast(data->decoration->target_view)->toplevel());
 }
 
@@ -857,7 +856,7 @@ void ungroup_window(wl_client*, struct wl_resource*, uint32_t id, bool closing)
     wf::get_core().default_wm->focus_raise_view(view);
 
     wayfire_view unhide_me = nullptr;
-    auto last_group_focused_timestamp = 0;
+    uint64_t last_group_focused_timestamp = 0;
     for (auto& v : wf::get_core().get_all_views())
     {
         if ((v->role != wf::VIEW_ROLE_TOPLEVEL) || (v == view))
