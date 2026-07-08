@@ -296,6 +296,7 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
 
         set_pending_size(wf::dimensions(decorated_toplevel->pending().geometry));
 
+        auto prev_deco_state = deco_state;
         deco_state = gtk4_decoration_tx_state::START;
 
         LOGD("Committing with ", pending, " state is ", (int)deco_state);
@@ -305,18 +306,14 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
 
         if (wf::dimensions(box) != pending)
         {
-            if (!use_csd)
+            if (!use_csd && (prev_deco_state == gtk4_decoration_tx_state::TENTATIVE))
             {
                 wlr_xdg_toplevel_set_size(toplevel, pending.width, pending.height);
             }
         } else
         {
             wf::txn::emit_object_ready(this);
-            return;
         }
-
-        committed = pending;
-        size_updated();
     }
 
     void apply()
