@@ -947,7 +947,7 @@ static void handle_deco_client_destroy(struct wl_listener*, void*)
 
         for (auto & v : wf::get_core().get_all_views())
         {
-            if (!wf::toplevel_cast(v))
+            if (!v || !wf::toplevel_cast(v))
             {
                 continue;
             }
@@ -1206,7 +1206,7 @@ class gtk4_decoration_plugin : public wf::plugin_interface_t
         }
 
         LOGD("Need decoration for ", ev->view);
-        if (decorator_resource)
+        if (decorator_resource && !wf::toplevel_cast(ev->view)->toplevel()->pending().fullscreen)
         {
             wlr_server_decoration_manager_set_default_mode(
                 wf::get_core().protocols.decorator_manager,
