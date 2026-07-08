@@ -117,6 +117,26 @@ static void drag_end_cb(GtkDragSource *source,
     g_print("Drag operation completed.\n");
 }
 
+static void scroll_sync(window_data *wdata)
+{
+    auto group_id = wdata->group.id;
+
+    if (!group_id)
+    {
+        return;
+    }
+
+    GtkAdjustment *h_adj = gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(wdata->scrolled_window));
+
+    for (auto cdata : win_data)
+    {
+        if (cdata.second->group.id == group_id)
+        {
+            gtk_scrolled_window_set_hadjustment(GTK_SCROLLED_WINDOW(cdata.second->scrolled_window), h_adj);
+        }
+    }
+}
+
 static void on_button_pressed(GtkGestureClick *gesture,
     int n_press,
     double x,
@@ -189,6 +209,48 @@ static void ungroup(window_data *wdata)
 
     refresh_group(group_id);
     ungroup_window(wdata->wf_id);
+}
+
+static void group(window_data *drop_target_data, uint32_t wf_id)
+{
+    auto drag_source_data = win_data[view_to_decor[wf_id]];
+    uint32_t group_id     = 1;
+
+    ungroup(drag_source_data.get());
+    group_windows(drop_target_data->wf_id, wf_id);
+
+    if (drop_target_data->group.id)
+    {
+        group_id = drop_target_data->group.id;
+    } else
+    {
+        for (auto wdata : win_data)
+        {
+            if (wdata.second->group.id >= group_id)
+            {
+                group_id = wdata.second->group.id + 1;
+            }
+        }
+
+        drop_target_data->group.parent = true;
+        drop_target_data->group.id     = group_id;
+        drop_target_data->group.order.push_back(drop_target_data->wf_id);
+    }
+
+    drag_source_data->group.id = group_id;
+
+    for (auto wdata : win_data)
+    {
+        if ((wdata.second->group.id == group_id) && wdata.second->group.parent)
+        {
+            wdata.second->group.order.push_back(drag_source_data->wf_id);
+            break;
+        }
+    }
+
+    clear_group_tabs(group_id);
+    refresh_group(group_id);
+    scroll_sync(drop_target_data);
 }
 
 static void on_button_released(GtkGestureClick *gesture,
@@ -325,12 +387,12 @@ static gboolean drop_cb(GtkDropTarget *target,
 {
     g_print("Drop.\n");
     auto drop_target_data = (window_data*)user_data;
-    uint32_t group_id     = 1;
 
     if (G_VALUE_HOLDS(value, G_TYPE_INT))
     {
         auto wf_id = g_value_get_int(value);
         printf("%s: wf_id: %d\n", __func__, wf_id);
+
         if (drop_target_data->wf_id == wf_id)
         {
             g_print("Dropped on self, ignoring\n");
@@ -338,41 +400,8 @@ static gboolean drop_cb(GtkDropTarget *target,
         }
 
         g_print("Dropped on target, success!\n");
-        auto drag_source_data = win_data[view_to_decor[wf_id]];
-        ungroup(drag_source_data.get());
-        group_windows(drop_target_data->wf_id, wf_id);
 
-        if (drop_target_data->group.id)
-        {
-            group_id = drop_target_data->group.id;
-        } else
-        {
-            for (auto wdata : win_data)
-            {
-                if (wdata.second->group.id >= group_id)
-                {
-                    group_id = wdata.second->group.id + 1;
-                }
-            }
-
-            drop_target_data->group.parent = true;
-            drop_target_data->group.id     = group_id;
-            drop_target_data->group.order.push_back(drop_target_data->wf_id);
-        }
-
-        drag_source_data->group.id = group_id;
-
-        for (auto wdata : win_data)
-        {
-            if ((wdata.second->group.id == group_id) && wdata.second->group.parent)
-            {
-                wdata.second->group.order.push_back(drag_source_data->wf_id);
-                break;
-            }
-        }
-
-        clear_group_tabs(group_id);
-        refresh_group(group_id);
+        group(drop_target_data, wf_id);
 
         return true;
     }
@@ -396,6 +425,7 @@ static gboolean on_scroll_cb(GtkEventControllerScroll *controller,
     gdouble lower = gtk_adjustment_get_lower(h_adj);
     gdouble upper = gtk_adjustment_get_upper(h_adj);
     new_value = CLAMP(new_value, lower, upper);
+    gtk_adjustment_set_value(h_adj, new_value);
 
     auto group_id = wdata->group.id;
 
@@ -405,9 +435,12 @@ static gboolean on_scroll_cb(GtkEventControllerScroll *controller,
         {
             if (cdata.second->group.id == group_id)
             {
-                h_adj =
-                    gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(cdata.second->scrolled_window));
-                gtk_adjustment_set_value(h_adj, new_value);
+                gtk_scrolled_window_set_hadjustment(GTK_SCROLLED_WINDOW(cdata.second->scrolled_window),
+                    h_adj);
+                auto value =
+                    gtk_adjustment_get_value(gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(cdata.
+                        second
+                        ->scrolled_window)));
             }
         }
     }
