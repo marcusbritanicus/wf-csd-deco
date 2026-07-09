@@ -805,7 +805,6 @@ void do_group_windows(wl_client*, struct wl_resource*, uint32_t parent_id, uint3
     while (!parent->get_root_node()->is_enabled())
     {
         wf::scene::set_node_enabled(parent->get_root_node(), true);
-        wf::scene::set_node_enabled(parent->get_root_node(), true);
     }
 
     auto cg = wf::toplevel_cast(child)->get_geometry();
@@ -852,7 +851,6 @@ void do_select_window(wl_client*, struct wl_resource*, uint32_t select_id)
 
     while (!view->get_root_node()->is_enabled())
     {
-        wf::scene::set_node_enabled(view->get_root_node(), true);
         wf::scene::set_node_enabled(view->get_root_node(), true);
     }
 
@@ -939,7 +937,6 @@ void ungroup_window(wl_client*, struct wl_resource*, uint32_t id, bool closing)
     while (!view->get_root_node()->is_enabled())
     {
         wf::scene::set_node_enabled(view->get_root_node(), true);
-        wf::scene::set_node_enabled(view->get_root_node(), true);
     }
 
     wf::get_core().default_wm->focus_raise_view(view);
@@ -982,7 +979,6 @@ void ungroup_window(wl_client*, struct wl_resource*, uint32_t id, bool closing)
     {
         while (!unhide_me->get_root_node()->is_enabled())
         {
-            wf::scene::set_node_enabled(unhide_me->get_root_node(), true);
             wf::scene::set_node_enabled(unhide_me->get_root_node(), true);
         }
     }
