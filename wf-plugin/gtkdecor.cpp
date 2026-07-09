@@ -268,7 +268,7 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
 
           case gtk4_decoration_tx_state::START:
             deco_state = gtk4_decoration_tx_state::TENTATIVE;
-            break;
+            return;
 
           case gtk4_decoration_tx_state::WAITING_FINAL:
             deco_state = gtk4_decoration_tx_state::STABLE;
@@ -311,7 +311,11 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
         } else
         {
             wf::txn::emit_object_ready(this);
+            return;
         }
+
+        committed = pending;
+        size_updated();
     }
 
     void apply()
@@ -473,7 +477,7 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
     void handle_destroy()
     {
         unset_hook(target_view->get_output());
-        ungroup_window(NULL, NULL, target_view->get_id(), true);
+        ungroup_window(NULL, NULL, target_view->get_id(), false);
         if (decorator_resource)
         {
             wf_decorator_manager_send_destroy_decoration(decorator_resource, target_view->get_id());
@@ -800,8 +804,6 @@ void do_group_windows(wl_client*, struct wl_resource*, uint32_t parent_id, uint3
         child_data->decoration->group_id = parent_data->decoration->group_id;
     }
 
-    LOGD("do_group_windows: child group id: ", child_data->decoration->group_id);
-
     while (!parent->get_root_node()->is_enabled())
     {
         wf::scene::set_node_enabled(parent->get_root_node(), true);
@@ -887,7 +889,7 @@ void do_select_window(wl_client*, struct wl_resource*, uint32_t select_id)
     }
 }
 
-void ungroup_window(wl_client*, struct wl_resource*, uint32_t id, bool closing)
+void ungroup_window(wl_client*, struct wl_resource*, uint32_t id, bool restore_position)
 {
     wayfire_view view = nullptr;
     for (auto& v : wf::get_core().get_all_views())
@@ -929,7 +931,7 @@ void ungroup_window(wl_client*, struct wl_resource*, uint32_t id, bool closing)
 
     auto from_geometry = wf::toplevel_cast(view)->get_geometry();
 
-    if (!closing)
+    if (restore_position)
     {
         wf::toplevel_cast(view)->move(rg.x, rg.y);
     }
@@ -986,7 +988,7 @@ void ungroup_window(wl_client*, struct wl_resource*, uint32_t id, bool closing)
 
 void do_ungroup_window(wl_client*, struct wl_resource*, uint32_t id)
 {
-    ungroup_window(NULL, NULL, id, false);
+    ungroup_window(NULL, NULL, id, true);
 }
 
 void do_close_request(wl_client*, struct wl_resource*, uint32_t id)
@@ -1043,7 +1045,7 @@ static void handle_deco_client_destroy(struct wl_listener*, void*)
                 continue;
             }
 
-            ungroup_window(NULL, NULL, v->get_id(), false);
+            ungroup_window(NULL, NULL, v->get_id(), true);
         }
     }
 
