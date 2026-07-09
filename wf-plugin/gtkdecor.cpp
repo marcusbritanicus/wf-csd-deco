@@ -472,6 +472,7 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
 
     void handle_destroy()
     {
+        unset_hook(target_view->get_output());
         ungroup_window(NULL, NULL, target_view->get_id(), true);
         if (decorator_resource)
         {
@@ -864,6 +865,8 @@ void do_select_window(wl_client*, struct wl_resource*, uint32_t select_id)
         return;
     }
 
+    view_data->decoration->unset_hook(view->get_output());
+
     for (auto& v : wf::get_core().get_all_views())
     {
         if ((v->role != wf::VIEW_ROLE_TOPLEVEL) || (v == view))
@@ -1083,6 +1086,8 @@ static void handle_deco_client_destroy(struct wl_listener*, void*)
             wf::scene::remove_child(root_node);
             root_node.reset();
         }
+
+        data->decoration.reset();
 
         v->damage();
     }
@@ -1432,7 +1437,6 @@ class gtk4_decoration_plugin : public wf::plugin_interface_t
                         }
 
                         data->decoration.reset();
-                        data->decoration = nullptr;
 
                         v->damage();
                     }
