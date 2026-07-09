@@ -244,17 +244,18 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
         LOGD("Size is ", wf::dimensions(box), " state is ", (int)deco_state);
 
         auto vg = wf::toplevel_cast(target_view)->get_geometry();
-        if (wf::dimensions(box) != committed)
-        {
-            LOGD(wf::dimensions(box), " != ", committed);
-            committed = wf::dimensions(box);
-            adjust_target_geometry();
-        }
 
         switch (this->deco_state)
         {
           case gtk4_decoration_tx_state::STABLE:
             // Client simply committed, nothing has changed
+            if (wf::dimensions(box) != committed)
+            {
+                LOGD(wf::dimensions(box), " != ", committed);
+                committed = wf::dimensions(box);
+                adjust_target_geometry();
+            }
+
             return;
 
           case gtk4_decoration_tx_state::TENTATIVE:
@@ -313,9 +314,6 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
             wf::txn::emit_object_ready(this);
             return;
         }
-
-        committed = pending;
-        size_updated();
     }
 
     void apply()
