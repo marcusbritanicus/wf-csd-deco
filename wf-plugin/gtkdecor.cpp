@@ -206,9 +206,8 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
 
               case gtk4_decoration_tx_state::START:
                 this->deco_state = gtk4_decoration_tx_state::WAITING_FINAL;
-                if (!root_node->is_enabled())
+                if (!target_view->get_root_node()->is_enabled())
                 {
-                    wf::scene::set_node_enabled(root_node, true);
                     wf::scene::set_node_enabled(target_view->get_root_node(), true);
                     wf::scene::set_node_enabled(target_view->get_root_node(), true);
                     wf::scene::update(target_view->get_root_node(), wf::scene::update_flag::REFOCUS);
@@ -277,9 +276,8 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
             break;
         }
 
-        if (!root_node->is_enabled())
+        if (!target_view->get_root_node()->is_enabled())
         {
-            wf::scene::set_node_enabled(root_node, true);
             wf::scene::set_node_enabled(target_view->get_root_node(), true);
             wf::scene::set_node_enabled(target_view->get_root_node(), true);
             wf::scene::update(target_view->get_root_node(), wf::scene::update_flag::REFOCUS);
@@ -1243,7 +1241,6 @@ class gtk4_decoration_plugin : public wf::plugin_interface_t
 
         wf_decorator_manager_send_title_changed(decorator_resource, id, target->get_title().c_str());
         wf_decorator_manager_send_app_id_changed(decorator_resource, id, target->get_app_id().c_str());
-        wf::scene::set_node_enabled(decoration_root_node, false);
         do_update_borders(NULL, NULL, target->get_id(), 0, 0, 0, 0);
         auto vg = target->get_geometry();
         wlr_xdg_toplevel_set_size(deco_toplevel, vg.width + 1, vg.height + 1);
