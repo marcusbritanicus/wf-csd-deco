@@ -255,7 +255,7 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
         {
           case gtk4_decoration_tx_state::STABLE:
             // Client simply committed, nothing has changed
-            break;
+            return;
 
           case gtk4_decoration_tx_state::TENTATIVE:
             // Client commits twice?
@@ -264,7 +264,7 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
                 wlr_xdg_toplevel_set_size(toplevel, vg.width, vg.height);
             }
 
-            break;
+            return;
 
           case gtk4_decoration_tx_state::START:
             deco_state = gtk4_decoration_tx_state::TENTATIVE;
@@ -578,6 +578,7 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
                 while (target_view->get_root_node()->is_enabled())
                 {
                     wf::scene::set_node_enabled(target_view->get_root_node(), false);
+                    wf::scene::set_node_enabled(target_view->get_root_node(), false);
                 }
             }
         }
@@ -798,8 +799,11 @@ void do_group_windows(wl_client*, struct wl_resource*, uint32_t parent_id, uint3
         child_data->decoration->group_id = parent_data->decoration->group_id;
     }
 
+    LOGD("do_group_windows: child group id: ", child_data->decoration->group_id);
+
     while (!parent->get_root_node()->is_enabled())
     {
+        wf::scene::set_node_enabled(parent->get_root_node(), true);
         wf::scene::set_node_enabled(parent->get_root_node(), true);
     }
 
@@ -840,13 +844,14 @@ void do_select_window(wl_client*, struct wl_resource*, uint32_t select_id)
 
     auto view_data = wf::toplevel_cast(view)->toplevel()->get_data<gtk4_toplevel_custom_data>();
 
-    if (!view_data)
+    if (!view_data || !view_data->decoration)
     {
         return;
     }
 
     while (!view->get_root_node()->is_enabled())
     {
+        wf::scene::set_node_enabled(view->get_root_node(), true);
         wf::scene::set_node_enabled(view->get_root_node(), true);
     }
 
@@ -867,12 +872,13 @@ void do_select_window(wl_client*, struct wl_resource*, uint32_t select_id)
         }
 
         auto data = wf::toplevel_cast(v)->toplevel()->get_data<gtk4_toplevel_custom_data>();
-        if (data)
+        if (data && data->decoration)
         {
             if (data->decoration->group_id == group_id)
             {
                 while (v->get_root_node()->is_enabled())
                 {
+                    wf::scene::set_node_enabled(v->get_root_node(), false);
                     wf::scene::set_node_enabled(v->get_root_node(), false);
                 }
             }
@@ -930,6 +936,7 @@ void ungroup_window(wl_client*, struct wl_resource*, uint32_t id, bool closing)
     while (!view->get_root_node()->is_enabled())
     {
         wf::scene::set_node_enabled(view->get_root_node(), true);
+        wf::scene::set_node_enabled(view->get_root_node(), true);
     }
 
     wf::get_core().default_wm->focus_raise_view(view);
@@ -972,6 +979,7 @@ void ungroup_window(wl_client*, struct wl_resource*, uint32_t id, bool closing)
     {
         while (!unhide_me->get_root_node()->is_enabled())
         {
+            wf::scene::set_node_enabled(unhide_me->get_root_node(), true);
             wf::scene::set_node_enabled(unhide_me->get_root_node(), true);
         }
     }
@@ -1242,8 +1250,6 @@ class gtk4_decoration_plugin : public wf::plugin_interface_t
         wf_decorator_manager_send_title_changed(decorator_resource, id, target->get_title().c_str());
         wf_decorator_manager_send_app_id_changed(decorator_resource, id, target->get_app_id().c_str());
         do_update_borders(NULL, NULL, target->get_id(), 0, 0, 0, 0);
-        auto vg = target->get_geometry();
-        wlr_xdg_toplevel_set_size(deco_toplevel, vg.width + 1, vg.height + 1);
     }
 
     wf::signal::connection_t<wf::view_pre_map_signal> on_pre_map = [=] (wf::view_pre_map_signal *ev)
