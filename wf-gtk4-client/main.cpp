@@ -57,7 +57,7 @@ static gboolean close_window(GtkWindow *window, gpointer data)
 
 static void on_area_resized(GtkDrawingArea*, int w, int h, gpointer data)
 {
-    printf("size_allocate\n");
+    printf("on_area_resized\n");
     auto cdata = (custom_data*)data;
     auto id    = cdata->id;
     auto area  = cdata->area;

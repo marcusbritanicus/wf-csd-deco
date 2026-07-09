@@ -1062,25 +1062,11 @@ static void handle_deco_client_destroy(struct wl_listener*, void*)
 
         data->decoration->handle_destroy();
 
-        auto mask_node = data->decoration->mask_node.lock();
-        if (mask_node)
-        {
-            wf::scene::remove_child(mask_node);
-            mask_node.reset();
-        }
-
         auto deco_node = data->decoration->deco_node;
         if (deco_node)
         {
             wf::scene::remove_child(deco_node);
             deco_node.reset();
-        }
-
-        auto root_node = data->decoration->root_node;
-        if (root_node)
-        {
-            wf::scene::remove_child(root_node);
-            root_node.reset();
         }
 
         data->decoration.reset();
@@ -1251,6 +1237,10 @@ class gtk4_decoration_plugin : public wf::plugin_interface_t
         wf_decorator_manager_send_title_changed(decorator_resource, id, target->get_title().c_str());
         wf_decorator_manager_send_app_id_changed(decorator_resource, id, target->get_app_id().c_str());
         do_update_borders(NULL, NULL, target->get_id(), 0, 0, 0, 0);
+
+        /* Nudge so the client computes and sends the decorator window shadow margins */
+        auto vg = target->get_geometry();
+        wlr_xdg_toplevel_set_size(deco_toplevel, vg.width + 1, vg.height);
     }
 
     wf::signal::connection_t<wf::view_pre_map_signal> on_pre_map = [=] (wf::view_pre_map_signal *ev)
@@ -1411,25 +1401,11 @@ class gtk4_decoration_plugin : public wf::plugin_interface_t
                     {
                         data->decoration->handle_destroy();
 
-                        auto mask_node = data->decoration->mask_node.lock();
-                        if (mask_node)
-                        {
-                            wf::scene::remove_child(mask_node);
-                            mask_node.reset();
-                        }
-
                         auto deco_node = data->decoration->deco_node;
                         if (deco_node)
                         {
                             wf::scene::remove_child(deco_node);
                             deco_node.reset();
-                        }
-
-                        auto root_node = data->decoration->root_node;
-                        if (root_node)
-                        {
-                            wf::scene::remove_child(root_node);
-                            root_node.reset();
                         }
 
                         data->decoration.reset();
