@@ -126,13 +126,13 @@ static void scroll_sync(window_data *wdata)
         return;
     }
 
-    GtkAdjustment *h_adj = gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(wdata->scrolled_window));
-
     for (auto cdata : win_data)
     {
-        if (cdata.second->group.id == group_id)
+        if ((cdata.second->group.id == group_id) && cdata.second->group.parent)
         {
-            gtk_scrolled_window_set_hadjustment(GTK_SCROLLED_WINDOW(cdata.second->scrolled_window), h_adj);
+            gtk_scrolled_window_set_hadjustment(GTK_SCROLLED_WINDOW(wdata->scrolled_window),
+                gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(cdata.second->scrolled_window)));
+            break;
         }
     }
 }
@@ -437,10 +437,6 @@ static gboolean on_scroll_cb(GtkEventControllerScroll *controller,
             {
                 gtk_scrolled_window_set_hadjustment(GTK_SCROLLED_WINDOW(cdata.second->scrolled_window),
                     h_adj);
-                auto value =
-                    gtk_adjustment_get_value(gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(cdata.
-                        second
-                        ->scrolled_window)));
             }
         }
     }
