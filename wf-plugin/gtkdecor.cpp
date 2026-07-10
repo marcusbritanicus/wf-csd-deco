@@ -313,6 +313,24 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
             wf::txn::emit_object_ready(this);
             return;
         }
+
+        switch (this->deco_state)
+        {
+          case gtk4_decoration_tx_state::STABLE:
+            return;
+
+          case gtk4_decoration_tx_state::TENTATIVE:
+            return;
+
+          case gtk4_decoration_tx_state::START:
+            deco_state = gtk4_decoration_tx_state::TENTATIVE;
+            return;
+
+          case gtk4_decoration_tx_state::WAITING_FINAL:
+            deco_state = gtk4_decoration_tx_state::STABLE;
+            wf::txn::emit_object_ready(this);
+            return;
+        }
     }
 
     void apply()
@@ -750,6 +768,9 @@ void do_update_borders(wl_client*, struct wl_resource*, uint32_t id, uint32_t to
     data->decoration->root_node->set_offset({double(use_csd ? -(l - data->margin_offset.x) : -l),
         double(use_csd ? -(t - data->margin_offset.y) : -t)});
     wf::get_core().tx_manager->schedule_object(wf::toplevel_cast(data->decoration->target_view)->toplevel());
+    wf::scene::update(data->decoration->target_view->get_root_node(), 0xFF);
+    wf::scene::update(data->decoration->root_node, 0xFF);
+    wf::scene::damage_node(data->decoration->root_node, data->decoration->root_node->get_bounding_box());
 }
 
 void do_group_windows(wl_client*, struct wl_resource*, uint32_t parent_id, uint32_t child_id)
@@ -1242,7 +1263,8 @@ class gtk4_decoration_plugin : public wf::plugin_interface_t
 
         /* Nudge so the client computes and sends the decorator window shadow margins */
         auto vg = target->get_geometry();
-        wlr_xdg_toplevel_set_size(deco_toplevel, vg.width + 1, vg.height + 1);
+        wlr_xdg_toplevel_set_size(deco_toplevel, vg.width + 1, vg.height);
+        wlr_xdg_toplevel_set_size(deco_toplevel, vg.width, vg.height + 1);
     }
 
     wf::signal::connection_t<wf::view_pre_map_signal> on_pre_map = [=] (wf::view_pre_map_signal *ev)
@@ -1455,8 +1477,18 @@ class gtk4_decoration_plugin : public wf::plugin_interface_t
                             WLR_SERVER_DECORATION_MANAGER_MODE_CLIENT);
                         wf_decorator_manager_send_create_new_decoration(decorator_resource, v->get_id());
 
-                        wf::scene::set_node_enabled(v->get_root_node(), false);
-                        wf::scene::set_node_enabled(v->get_root_node(), false);
+                        auto data = wf::toplevel_cast(
+                            v)->toplevel()->get_data_safe<gtk4_toplevel_custom_data>();
+
+                        if ((data->margin_offset.x == -1) && (data->margin_offset.y == -1))
+                        {
+                            auto bg = v->get_bounding_box();
+                            auto vg = wf::toplevel_cast(v)->get_geometry();
+                            data->margin_offset.x = vg.x - bg.x;
+                            data->margin_offset.y = vg.y - bg.y;
+                        }
+
+                        LOGD("margin_offsets: ", data->margin_offset.x, ",", data->margin_offset.y);
                     }
                 }
             }
