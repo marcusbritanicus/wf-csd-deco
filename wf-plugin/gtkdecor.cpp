@@ -248,7 +248,10 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
         switch (this->deco_state)
         {
           case gtk4_decoration_tx_state::STABLE:
-            // Client simply committed, nothing has changed
+          // Client simply committed, nothing has changed
+
+          case gtk4_decoration_tx_state::TENTATIVE:
+            // Client commits twice?
             if (wf::dimensions(box) != committed)
             {
                 LOGD(wf::dimensions(box), " != ", committed);
@@ -256,10 +259,6 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
                 adjust_target_geometry();
             }
 
-            return;
-
-          case gtk4_decoration_tx_state::TENTATIVE:
-            // Client commits twice?
             if (use_csd && (wf::dimensions(box) != wf::dimensions(vg)))
             {
                 wlr_xdg_toplevel_set_size(toplevel, vg.width, vg.height);
@@ -351,11 +350,6 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
         if (desired != tg)
         {
             LOGD("Adjusting target on deco commit: ", desired, " != ", tg);
-            if (use_csd)
-            {
-                wf::toplevel_cast(target_view)->move(vg.x, vg.y - margin_top + margin_bottom);
-            }
-
             if (wlr_xwayland_surface_try_from_wlr_surface(target_view->get_wlr_surface()))
             {
                 desired.height -= margin_top - margin_bottom + 1;
@@ -1248,7 +1242,7 @@ class gtk4_decoration_plugin : public wf::plugin_interface_t
 
         /* Nudge so the client computes and sends the decorator window shadow margins */
         auto vg = target->get_geometry();
-        wlr_xdg_toplevel_set_size(deco_toplevel, vg.width + 1, vg.height);
+        wlr_xdg_toplevel_set_size(deco_toplevel, vg.width + 1, vg.height + 1);
     }
 
     wf::signal::connection_t<wf::view_pre_map_signal> on_pre_map = [=] (wf::view_pre_map_signal *ev)
