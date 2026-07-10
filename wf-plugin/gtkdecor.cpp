@@ -1105,10 +1105,22 @@ static void handle_deco_client_destroy(struct wl_listener*, void*)
     unbind_decorator(NULL);
 }
 
+static wl_client *decorator_client;
 void bind_decorator(wl_client *client, void*, uint32_t, uint32_t id)
 {
+    if (decorator_resource)
+    {
+        if (client != decorator_client)
+        {
+            wl_client_destroy(client);
+        }
+
+        return;
+    }
+
     LOGI("Binding wf-decorator");
     auto resource = wl_resource_create(client, &wf_decorator_manager_interface, 1, id);
+    decorator_client = client;
 
     wl_resource_set_implementation(resource, &decorator_implementation, NULL, NULL);
     decorator_resource = resource;
