@@ -462,7 +462,8 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
         on_request_minimize.connect(&toplevel->events.request_minimize);
         on_commit.connect(&toplevel->base->surface->events.commit);
         on_deco_destroy.connect(&toplevel->events.destroy);
-        if (wlr_xdg_toplevel_try_from_wlr_surface(target_view->get_wlr_surface()))
+        if (target_view->get_wlr_surface() &&
+            wlr_xdg_toplevel_try_from_wlr_surface(target_view->get_wlr_surface()))
         {
             on_request_target_maximize.connect(&wlr_xdg_toplevel_try_from_wlr_surface(target_view->
                 get_wlr_surface())->events.request_maximize);
@@ -1293,7 +1294,7 @@ class gtk4_decoration_plugin : public wf::plugin_interface_t
         }
 
         LOGD("Need decoration for ", ev->view);
-        if (decorator_resource && !wf::toplevel_cast(ev->view)->toplevel()->pending().fullscreen)
+        if (decorator_resource)
         {
             auto data = wf::toplevel_cast(ev->view)->toplevel()->get_data_safe<gtk4_toplevel_custom_data>();
 
@@ -1314,8 +1315,40 @@ class gtk4_decoration_plugin : public wf::plugin_interface_t
                 WLR_SERVER_DECORATION_MANAGER_MODE_CLIENT);
             wf_decorator_manager_send_create_new_decoration(decorator_resource, ev->view->get_id());
 
+            if (wf::toplevel_cast(ev->view)->toplevel()->pending().fullscreen)
+            {
+                return;
+            }
+
             wf::scene::set_node_enabled(ev->view->get_root_node(), false);
             wf::scene::set_node_enabled(ev->view->get_root_node(), false);
+        }
+    };
+
+    wf::signal::connection_t<wf::view_fullscreen_signal> on_fullscreen =
+        [=] (wf::view_fullscreen_signal *ev)
+    {
+        if (ev->view->role != wf::VIEW_ROLE_TOPLEVEL)
+        {
+            return;
+        }
+
+        auto data = wf::toplevel_cast(ev->view)->toplevel()->get_data<gtk4_toplevel_custom_data>();
+
+        if (ev->state)
+        {
+            if (data && data->decoration)
+            {
+                wf::scene::remove_child(data->decoration->root_node);
+
+                ev->view->damage();
+            }
+        } else
+        {
+            if (decorator_resource && data && data->decoration)
+            {
+                wf::scene::readd_front(ev->view->get_surface_root_node(), data->decoration->root_node);
+            }
         }
     };
 
@@ -1383,6 +1416,7 @@ class gtk4_decoration_plugin : public wf::plugin_interface_t
 
         wf::get_core().connect(&on_mapped);
         wf::get_core().connect(&on_pre_map);
+        wf::get_core().connect(&on_fullscreen);
         wf::get_core().connect(&on_view_geometry_changed);
         wf::get_core().tx_manager->connect(&on_new_tx);
 
@@ -1441,6 +1475,7 @@ class gtk4_decoration_plugin : public wf::plugin_interface_t
         wl_global_remove(decorator_global);
         on_mapped.disconnect();
         on_pre_map.disconnect();
+        on_fullscreen.disconnect();
         on_view_geometry_changed.disconnect();
         on_new_tx.disconnect();
         wl_global_destroy(decorator_global);
