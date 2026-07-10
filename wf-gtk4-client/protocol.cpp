@@ -40,17 +40,20 @@ const wf_decorator_manager_listener decorator_listener =
     app_id_changed
 };
 
-void registry_add_object(void*, struct wl_registry *registry, uint32_t name,
+static uint32_t decorator_global_id;
+void registry_add_object(void*, struct wl_registry *registry, uint32_t id,
     const char *interface, uint32_t)
 {
     std::cout << "new registry: " << interface << std::endl;
-    if (strcmp(interface, wf_decorator_manager_interface.name) == 0)
+    if ((strcmp(interface, wf_decorator_manager_interface.name) == 0) &&
+        (decorator_global_id != id))
     {
         std::cout << "bind it" << std::endl;
         decorator_manager =
-            (wf_decorator_manager*)wl_registry_bind(registry, name, &wf_decorator_manager_interface, 1u);
+            (wf_decorator_manager*)wl_registry_bind(registry, id, &wf_decorator_manager_interface, 1u);
 
         wf_decorator_manager_add_listener(decorator_manager, &decorator_listener, NULL);
+        decorator_global_id = id;
     }
 }
 
