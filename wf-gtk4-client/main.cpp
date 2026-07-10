@@ -447,7 +447,7 @@ static gboolean on_scroll_cb(GtkEventControllerScroll *controller,
 GtkWidget *create_deco_window(uint32_t wf_id)
 {
     auto window = gtk_application_window_new(app);
-    gtk_window_set_default_size(GTK_WINDOW(window), 400, 40);
+    gtk_window_set_default_size(GTK_WINDOW(window), 250, 250);
     gtk_widget_set_size_request(window, 300, 50);
     auto area = gtk_drawing_area_new();
     gtk_window_set_child(GTK_WINDOW(window), area);
