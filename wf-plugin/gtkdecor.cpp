@@ -334,7 +334,8 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
     void adjust_target_geometry()
     {
         auto desired = wf::dimensions(toplevel->base->geometry);
-        auto tg = wf::dimensions(wf::toplevel_cast(target_view)->get_geometry());
+        auto vg = wf::toplevel_cast(target_view)->get_geometry();
+        auto tg = wf::dimensions(vg);
         if (!target_view->get_wlr_surface())
         {
             return;
@@ -350,6 +351,11 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
         if (desired != tg)
         {
             LOGD("Adjusting target on deco commit: ", desired, " != ", tg);
+            if (use_csd)
+            {
+                wf::toplevel_cast(target_view)->move(vg.x, vg.y - margin_top + margin_bottom);
+            }
+
             if (wlr_xwayland_surface_try_from_wlr_surface(target_view->get_wlr_surface()))
             {
                 desired.height -= margin_top - margin_bottom + 1;
@@ -380,6 +386,7 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
         this->mask_node   = mask;
         this->decorated_toplevel = decorated_toplevel;
         this->root_node = root_node;
+        this->margin_offset.x = this->margin_offset.y = -1;
         /* TODO: Make duration configurable */
         this->progression = deco_animation_t(wf::create_option<int>(400));
 
@@ -1107,7 +1114,7 @@ void bind_decorator(wl_client *client, void*, uint32_t, uint32_t id)
 
         auto data = wf::toplevel_cast(view)->toplevel()->get_data_safe<gtk4_toplevel_custom_data>();
 
-        if ((data->margin_offset.x == 0) && (data->margin_offset.y == 0))
+        if ((data->margin_offset.x == -1) && (data->margin_offset.y == -1))
         {
             auto bg = view->get_bounding_box();
             auto vg = wf::toplevel_cast(view)->get_geometry();
