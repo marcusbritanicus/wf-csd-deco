@@ -13,7 +13,7 @@ project(
 )
 
 gtk4 = dependency('gtk4')
-wayfire = dependency('wayfire')
+wayfire = dependency('wayfire', version: '>=0.11.0')
 wayland_client = dependency('wayland-client')
 wayland_server = dependency('wayland-server')
 
