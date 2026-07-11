@@ -1061,7 +1061,7 @@ static void handle_deco_client_destroy(struct wl_listener*, void*)
 
         for (auto & v : wf::get_core().get_all_views())
         {
-            if (!v || !v->is_mapped() || !wf::toplevel_cast(v))
+            if (v->role != wf::VIEW_ROLE_TOPLEVEL)
             {
                 continue;
             }
@@ -1072,7 +1072,7 @@ static void handle_deco_client_destroy(struct wl_listener*, void*)
 
     for (auto & v : wf::get_core().get_all_views())
     {
-        if (!wf::toplevel_cast(v))
+        if (v->role != wf::VIEW_ROLE_TOPLEVEL)
         {
             continue;
         }
