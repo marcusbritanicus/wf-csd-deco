@@ -1203,7 +1203,10 @@ class gtk4_decoration_plugin : public wf::plugin_interface_t
                 continue;
             }
 
+            /* Temporarily disconnect handler to avoid loop */
+            on_view_geometry_changed.disconnect();
             wf::toplevel_cast(v)->move(vg.x, vg.y);
+            wf::get_core().connect(&on_view_geometry_changed);
         }
     };
 
