@@ -201,19 +201,22 @@ static void ungroup(window_data *wdata)
 
     clear_group_tabs(group_id);
 
-    for (auto cdata : win_data)
+    if (group_id)
     {
-        if ((group_id == cdata.second->group.id) && cdata.second->group.parent)
+        for (auto cdata : win_data)
         {
-            cdata.second->group.order.erase(std::remove(cdata.second->group.order.begin(),
-                cdata.second->group.order.end(), wdata->wf_id), cdata.second->group.order.end());
-
-            if (wdata->group.parent)
+            if ((group_id == cdata.second->group.id) && cdata.second->group.parent)
             {
-                reparent_group(group_id, wdata);
-            }
+                cdata.second->group.order.erase(std::remove(cdata.second->group.order.begin(),
+                    cdata.second->group.order.end(), wdata->wf_id), cdata.second->group.order.end());
 
-            break;
+                if (wdata->group.parent)
+                {
+                    reparent_group(group_id, wdata);
+                }
+
+                break;
+            }
         }
     }
 
@@ -352,17 +355,8 @@ static void reparent_group(uint32_t group_id, window_data *last_parent)
 
     for (auto wdata : win_data)
     {
-        if (wdata.second->group.id == group_id)
+        if ((wdata.second->group.id == group_id) && (last_parent != wdata.second.get()))
         {
-            GtkAdjustment *h_adj =
-                gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(wdata.second->scrolled_window));
-            auto adj = gtk_adjustment_new(gtk_adjustment_get_value(h_adj),
-                gtk_adjustment_get_lower(h_adj),
-                gtk_adjustment_get_upper(h_adj),
-                gtk_adjustment_get_step_increment(h_adj),
-                gtk_adjustment_get_page_increment(h_adj),
-                gtk_adjustment_get_page_size(h_adj));
-            gtk_scrolled_window_set_hadjustment(GTK_SCROLLED_WINDOW(wdata.second->scrolled_window), adj);
             wdata.second->group.order  = last_parent->group.order;
             wdata.second->group.parent = true;
             last_parent->group.parent  = false;
