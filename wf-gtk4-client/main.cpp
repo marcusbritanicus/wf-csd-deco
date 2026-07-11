@@ -7,7 +7,6 @@ struct custom_data
 {
     uint32_t id;
     GtkWidget *area;
-    gulong size_allocate_signal;
 };
 
 static void activate(GtkApplication *app, gpointer)
@@ -117,22 +116,42 @@ static void drag_end_cb(GtkDragSource *source,
     g_print("Drag operation completed.\n");
 }
 
-static void scroll_sync(window_data *wdata)
+static void scroll_sync(uint32_t group_id)
 {
-    auto group_id = wdata->group.id;
-
     if (!group_id)
     {
         return;
     }
 
+    window_data *pdata = NULL;
     for (auto cdata : win_data)
     {
         if ((cdata.second->group.id == group_id) && cdata.second->group.parent)
         {
-            gtk_scrolled_window_set_hadjustment(GTK_SCROLLED_WINDOW(wdata->scrolled_window),
-                gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(cdata.second->scrolled_window)));
+            pdata = cdata.second.get();
             break;
+        }
+    }
+
+    if (!pdata)
+    {
+        g_print("No parent in group?\n");
+        return;
+    }
+
+    auto h_adj = gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(pdata->scrolled_window));
+    auto adj   = gtk_adjustment_new(gtk_adjustment_get_value(h_adj),
+        gtk_adjustment_get_lower(h_adj),
+        gtk_adjustment_get_upper(h_adj),
+        gtk_adjustment_get_step_increment(h_adj),
+        gtk_adjustment_get_page_increment(h_adj),
+        gtk_adjustment_get_page_size(h_adj));
+
+    for (auto cdata : win_data)
+    {
+        if (cdata.second->group.id == group_id)
+        {
+            gtk_scrolled_window_set_hadjustment(GTK_SCROLLED_WINDOW(cdata.second->scrolled_window), adj);
         }
     }
 }
@@ -184,22 +203,22 @@ static void ungroup(window_data *wdata)
 
     for (auto cdata : win_data)
     {
-        if (group_id == cdata.second->group.id)
+        if ((group_id == cdata.second->group.id) && cdata.second->group.parent)
         {
-            if (cdata.second->group.parent)
-            {
-                cdata.second->group.order.erase(std::remove(cdata.second->group.order.begin(),
-                    cdata.second->group.order.end(), wdata->wf_id), cdata.second->group.order.end());
-                if (wdata->wf_id == cdata.second->wf_id)
-                {
-                    reparent_group(group_id, wdata);
-                }
+            cdata.second->group.order.erase(std::remove(cdata.second->group.order.begin(),
+                cdata.second->group.order.end(), wdata->wf_id), cdata.second->group.order.end());
 
-                break;
+            if (wdata->group.parent)
+            {
+                reparent_group(group_id, wdata);
             }
+
+            break;
         }
     }
 
+    wdata->group.parent = false;
+    wdata->group.order.clear();
     wdata->group.id = 0;
 
     if (group_id)
@@ -235,6 +254,15 @@ static void group(window_data *drop_target_data, uint32_t wf_id)
         drop_target_data->group.parent = true;
         drop_target_data->group.id     = group_id;
         drop_target_data->group.order.push_back(drop_target_data->wf_id);
+        GtkAdjustment *h_adj =
+            gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(drop_target_data->scrolled_window));
+        auto adj = gtk_adjustment_new(gtk_adjustment_get_value(h_adj),
+            gtk_adjustment_get_lower(h_adj),
+            gtk_adjustment_get_upper(h_adj),
+            gtk_adjustment_get_step_increment(h_adj),
+            gtk_adjustment_get_page_increment(h_adj),
+            gtk_adjustment_get_page_size(h_adj));
+        gtk_scrolled_window_set_hadjustment(GTK_SCROLLED_WINDOW(drop_target_data->scrolled_window), adj);
     }
 
     drag_source_data->group.id = group_id;
@@ -250,7 +278,7 @@ static void group(window_data *drop_target_data, uint32_t wf_id)
 
     clear_group_tabs(group_id);
     refresh_group(group_id);
-    scroll_sync(drop_target_data);
+    scroll_sync(group_id);
 }
 
 static void on_button_released(GtkGestureClick *gesture,
@@ -275,6 +303,7 @@ static void add_tab_button(window_data *wdata, window_data *cdata)
     gtk_widget_add_controller(button, GTK_EVENT_CONTROLLER(drag_source));
 
     GtkGesture *click_gesture = gtk_gesture_click_new();
+    gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(click_gesture), 1);
     g_signal_connect(click_gesture, "pressed", G_CALLBACK(on_button_pressed), cdata);
     gtk_widget_add_controller(button, GTK_EVENT_CONTROLLER(click_gesture));
 
@@ -323,13 +352,23 @@ static void reparent_group(uint32_t group_id, window_data *last_parent)
 
     for (auto wdata : win_data)
     {
-        if ((wdata.second->group.id == group_id) && !wdata.second->group.parent)
+        if (wdata.second->group.id == group_id)
         {
+            GtkAdjustment *h_adj =
+                gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(wdata.second->scrolled_window));
+            auto adj = gtk_adjustment_new(gtk_adjustment_get_value(h_adj),
+                gtk_adjustment_get_lower(h_adj),
+                gtk_adjustment_get_upper(h_adj),
+                gtk_adjustment_get_step_increment(h_adj),
+                gtk_adjustment_get_page_increment(h_adj),
+                gtk_adjustment_get_page_size(h_adj));
+            gtk_scrolled_window_set_hadjustment(GTK_SCROLLED_WINDOW(wdata.second->scrolled_window), adj);
             wdata.second->group.order  = last_parent->group.order;
             wdata.second->group.parent = true;
             last_parent->group.parent  = false;
             last_parent->group.order.clear();
             last_parent->group.id = 0;
+            scroll_sync(group_id);
             break;
         }
     }
@@ -415,7 +454,20 @@ static gboolean on_scroll_cb(GtkEventControllerScroll *controller,
     gdouble dy,
     gpointer user_data)
 {
-    auto wdata = (window_data*)user_data;
+    auto wdata    = (window_data*)user_data;
+    auto group_id = wdata->group.id;
+
+    if (group_id)
+    {
+        for (auto cdata : win_data)
+        {
+            if ((cdata.second->group.id == group_id) && cdata.second->group.parent)
+            {
+                wdata = cdata.second.get();
+                break;
+            }
+        }
+    }
 
     GtkAdjustment *h_adj = gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(wdata->scrolled_window));
 
@@ -426,22 +478,9 @@ static gboolean on_scroll_cb(GtkEventControllerScroll *controller,
     gdouble upper = gtk_adjustment_get_upper(h_adj);
     new_value = CLAMP(new_value, lower, upper);
     gtk_adjustment_set_value(h_adj, new_value);
+    scroll_sync(group_id);
 
-    auto group_id = wdata->group.id;
-
-    if (group_id)
-    {
-        for (auto cdata : win_data)
-        {
-            if (cdata.second->group.id == group_id)
-            {
-                gtk_scrolled_window_set_hadjustment(GTK_SCROLLED_WINDOW(cdata.second->scrolled_window),
-                    h_adj);
-            }
-        }
-    }
-
-    return true;
+    return false;
 }
 
 GtkWidget *create_deco_window(uint32_t wf_id)
@@ -472,7 +511,6 @@ GtkWidget *create_deco_window(uint32_t wf_id)
     gtk_box_prepend(GTK_BOX(title_box), scrolled_window);
 
     GtkEventController *controller = gtk_event_controller_scroll_new(GTK_EVENT_CONTROLLER_SCROLL_BOTH_AXES);
-    g_signal_connect(controller, "scroll", G_CALLBACK(on_scroll_cb), wdata.get());
     gtk_widget_add_controller(tab_box, controller);
 
     wdata->scrolled_window = scrolled_window;
@@ -482,7 +520,9 @@ GtkWidget *create_deco_window(uint32_t wf_id)
     wdata->wf_id     = wf_id;
     win_data[window] = wdata;
 
-    cdata->size_allocate_signal = g_signal_connect(area, "resize", G_CALLBACK(on_area_resized), cdata);
+    g_signal_connect(controller, "scroll", G_CALLBACK(on_scroll_cb), wdata.get());
+
+    g_signal_connect(area, "resize", G_CALLBACK(on_area_resized), cdata);
     g_signal_connect(window, "close-request", G_CALLBACK(on_close_request), wdata.get());
 
     gtk_window_present(GTK_WINDOW(window));
