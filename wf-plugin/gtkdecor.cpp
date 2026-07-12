@@ -800,6 +800,9 @@ void do_group_windows(wl_client*, struct wl_resource*, uint32_t parent_id, uint3
 {
     uint32_t group_id = 1;
     wayfire_view parent = nullptr, child = nullptr;
+
+    ungroup_window(NULL, NULL, child_id, false);
+
     for (auto& v : wf::get_core().get_all_views())
     {
         if (v->role != wf::VIEW_ROLE_TOPLEVEL)

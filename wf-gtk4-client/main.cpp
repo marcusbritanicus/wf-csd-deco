@@ -195,7 +195,7 @@ static void clear_box(GtkWidget *box)
     }
 }
 
-static void ungroup(window_data *wdata)
+static void ungroup(window_data *wdata, bool notify_server)
 {
     auto group_id = wdata->group.id;
 
@@ -230,7 +230,10 @@ static void ungroup(window_data *wdata)
     }
 
     refresh_group(group_id);
-    ungroup_window(wdata->wf_id);
+    if (notify_server)
+    {
+        ungroup_window(wdata->wf_id);
+    }
 }
 
 static void group(window_data *drop_target_data, uint32_t wf_id)
@@ -238,7 +241,7 @@ static void group(window_data *drop_target_data, uint32_t wf_id)
     auto drag_source_data = win_data[view_to_decor[wf_id]];
     uint32_t group_id     = 1;
 
-    ungroup(drag_source_data.get());
+    ungroup(drag_source_data.get(), false);
     group_windows(drop_target_data->wf_id, wf_id);
 
     if (drop_target_data->group.id)
@@ -291,7 +294,7 @@ static void on_button_released(GtkGestureClick *gesture,
     gpointer user_data)
 {
     auto wdata = (window_data*)user_data;
-    ungroup(wdata);
+    ungroup(wdata, true);
 }
 
 static void add_tab_button(window_data *wdata, window_data *cdata)
