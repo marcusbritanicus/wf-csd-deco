@@ -21,6 +21,7 @@
  */
 #include <memory>
 #include <wayfire/core.hpp>
+#include <wayfire/seat.hpp>
 #include <wayfire/geometry.hpp>
 #include <wayfire/nonstd/wlroots-full.hpp>
 #include <wayfire/object.hpp>
@@ -155,7 +156,16 @@ class gtk4_mask_node_t : public wf::scene::floating_inner_node_t
 static const std::string gtk_decorator_prefix = "__wf_decorator:";
 wl_resource *decorator_resource = NULL;
 wl_listener deco_client_destroy_listener;
+void select_window(uint32_t select_id);
 void ungroup_window(wl_client*, struct wl_resource*, uint32_t id, bool closing);
+
+class gtk4_decoration_object_t;
+class gtk4_toplevel_custom_data : public wf::custom_data_t
+{
+  public:
+    std::shared_ptr<gtk4_decoration_object_t> decoration;
+    wf::point_t margin_offset;
+};
 
 class gtk4_decoration_object_t : public wf::txn::transaction_object_t
 {
@@ -487,10 +497,12 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
         on_request_move.connect(&toplevel->events.request_move);
         on_request_resize.connect(&toplevel->events.request_resize);
         on_request_deco_maximize.connect(&toplevel->events.request_maximize);
-        target_view->connect(&on_fullscreen);
-        target_view->connect(&on_view_title_changed);
         target_view->connect(&on_view_tiled);
+        target_view->connect(&on_fullscreen);
+        target_view->connect(&on_view_minimized);
         target_view->connect(&on_target_unmapped);
+        target_view->connect(&on_view_title_changed);
+        target_view->connect(&on_view_focus_request);
         on_request_minimize.connect(&toplevel->events.request_minimize);
         on_new_popup.connect(&wlr_xdg_surface_try_from_wlr_surface(
             deco_node->get_surface())->client->shell->events.new_popup);
@@ -534,8 +546,10 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
         on_request_deco_maximize.disconnect();
         on_request_target_maximize.disconnect();
         on_fullscreen.disconnect();
-        on_view_title_changed.disconnect();
         on_view_tiled.disconnect();
+        on_view_minimized.disconnect();
+        on_view_title_changed.disconnect();
+        on_view_focus_request.disconnect();
 
         this->toplevel = nullptr;
     }
@@ -572,6 +586,121 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
     wf::signal::connection_t<wf::view_tiled_signal> on_view_tiled = [=] (wf::view_tiled_signal*)
     {
         handle_maximize();
+    };
+
+    wf::signal::connection_t<wf::view_minimized_signal> on_view_minimized =
+        [=] (wf::view_minimized_signal*)
+    {
+        /*
+         * The following code is for grouped windows only
+         * TODO: Support multiple groups
+         */
+        if (!group_id)
+        {
+            return;
+        }
+
+        /* First, disconnect all the view_minimized signals for all views */
+        for (auto& v : wf::get_core().get_all_views())
+        {
+            if (v->role != wf::VIEW_ROLE_TOPLEVEL)
+            {
+                continue;
+            }
+
+            auto data = wf::toplevel_cast(v)->toplevel()->get_data<gtk4_toplevel_custom_data>();
+            if (data && data->decoration)
+            {
+                data->decoration->on_view_minimized.disconnect();
+            }
+        }
+
+        wayfire_view active_view = wf::get_core().seat->get_active_view();
+        /* Next, check if we should focus the view */
+        if ((target_view == active_view) && wf::toplevel_cast(target_view)->minimized &&
+            !target_view->get_root_node()->is_enabled())
+        {
+            select_window(target_view->get_id());
+        }
+
+        /* Then, synchronize minimize and adjust enabled states */
+        for (auto& v : wf::get_core().get_all_views())
+        {
+            if (v->role != wf::VIEW_ROLE_TOPLEVEL)
+            {
+                continue;
+            }
+
+            if (v == target_view)
+            {
+                if (!v->get_root_node()->is_enabled())
+                {
+                    wf::scene::set_node_enabled(v->get_root_node(), true);
+                    wf::scene::set_node_enabled(v->get_root_node(), true);
+                }
+            } else
+            {
+                wf::toplevel_cast(v)->set_minimized(wf::toplevel_cast(target_view)->minimized);
+                if (v->get_root_node()->is_enabled())
+                {
+                    wf::scene::set_node_enabled(v->get_root_node(), false);
+                    wf::scene::set_node_enabled(v->get_root_node(), false);
+                }
+            }
+        }
+
+        /* Finally, reconnect the view_minimized signals for all views */
+        for (auto& v : wf::get_core().get_all_views())
+        {
+            if (v->role != wf::VIEW_ROLE_TOPLEVEL)
+            {
+                continue;
+            }
+
+            auto data = wf::toplevel_cast(v)->toplevel()->get_data<gtk4_toplevel_custom_data>();
+            if (data && data->decoration)
+            {
+                data->decoration->target_view->connect(&data->decoration->on_view_minimized);
+            }
+        }
+    };
+
+    wf::signal::connection_t<wf::view_focus_request_signal> on_view_focus_request =
+        [=] (wf::view_focus_request_signal*)
+    {
+        /*
+         * The following code is for grouped windows only
+         * TODO: Support multiple groups
+         */
+        if (!group_id)
+        {
+            return;
+        }
+
+        /* Adjust enabled states */
+        for (auto& v : wf::get_core().get_all_views())
+        {
+            if (v->role != wf::VIEW_ROLE_TOPLEVEL)
+            {
+                continue;
+            }
+
+            if (v == target_view)
+            {
+                if (!v->get_root_node()->is_enabled())
+                {
+                    wf::scene::set_node_enabled(v->get_root_node(), true);
+                    wf::scene::set_node_enabled(v->get_root_node(), true);
+                }
+            } else
+            {
+                if (v->get_root_node()->is_enabled())
+                {
+                    wf::scene::set_node_enabled(v->get_root_node(), false);
+                    wf::scene::set_node_enabled(v->get_root_node(), false);
+                }
+            }
+        }
     };
 
     wf::signal::connection_t<wf::view_fullscreen_signal> on_fullscreen =
@@ -749,13 +878,6 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
     gtk4_decoration_tx_state deco_state = gtk4_decoration_tx_state::STABLE;
 };
 
-class gtk4_toplevel_custom_data : public wf::custom_data_t
-{
-  public:
-    std::shared_ptr<gtk4_decoration_object_t> decoration;
-    wf::point_t margin_offset;
-};
-
 void do_update_borders(wl_client*, struct wl_resource*, uint32_t id, uint32_t top, uint32_t bottom,
     uint32_t left, uint32_t right)
 {
@@ -869,7 +991,7 @@ void do_group_windows(wl_client*, struct wl_resource*, uint32_t parent_id, uint3
     }
 }
 
-void do_select_window(wl_client*, struct wl_resource*, uint32_t select_id)
+void select_window(uint32_t select_id)
 {
     wayfire_view view = nullptr;
     for (auto& v : wf::get_core().get_all_views())
@@ -934,6 +1056,11 @@ void do_select_window(wl_client*, struct wl_resource*, uint32_t select_id)
             }
         }
     }
+}
+
+void do_select_window(wl_client*, struct wl_resource*, uint32_t select_id)
+{
+    select_window(select_id);
 }
 
 void ungroup_window(wl_client*, struct wl_resource*, uint32_t id, bool restore_position)
