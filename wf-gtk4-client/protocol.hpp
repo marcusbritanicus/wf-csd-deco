@@ -14,6 +14,7 @@ struct window_data
     GtkWidget *title_box;
     GtkWidget *tab_box;
     std::string app_id;
+    std::string title;
     struct group_data
     {
         uint32_t id;

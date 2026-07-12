@@ -315,6 +315,8 @@ static void add_tab_button(window_data *wdata, window_data *cdata)
     g_signal_connect(click_gesture, "released", G_CALLBACK(on_button_released), cdata);
     gtk_widget_add_controller(button, GTK_EVENT_CONTROLLER(click_gesture));
 
+    gtk_widget_set_tooltip_text(button, cdata->title.c_str());
+
     gtk_box_append(GTK_BOX(wdata->tab_box), button);
 }
 
@@ -536,6 +538,9 @@ void destroy_deco_window(uint32_t wf_id)
 void set_title(GtkWidget *window, const char *title)
 {
     gtk_window_set_title(GTK_WINDOW(window), title);
+
+    auto wdata = win_data[window];
+    wdata->title = title;
 }
 
 void set_app_id(GtkWidget *window, const char *app_id)

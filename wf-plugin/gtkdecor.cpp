@@ -50,6 +50,8 @@
 #include <wayfire/unstable/wlr-view-events.hpp>
 #include <wayfire/unstable/translation-node.hpp>
 
+void create_xdg_popup(wlr_xdg_popup *popup);
+
 wf::decoration_margins_t deco_margins =
 {
     .left   = 0,
@@ -464,6 +466,24 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
                 !wf::toplevel_cast(target_view)->minimized);
         });
 
+        on_new_popup.set_callback([=] (void *data)
+        {
+            auto popup = (decltype(toplevel->base->popup))data;
+
+            if (!popup)
+            {
+                return;
+            }
+
+            if (deco_node->get_surface() != popup->parent)
+            {
+                return;
+            }
+
+            popup->parent = target_view->get_wlr_surface();
+            create_xdg_popup(popup);
+        });
+
         on_request_move.connect(&toplevel->events.request_move);
         on_request_resize.connect(&toplevel->events.request_resize);
         on_request_deco_maximize.connect(&toplevel->events.request_maximize);
@@ -472,6 +492,8 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
         target_view->connect(&on_view_tiled);
         target_view->connect(&on_target_unmapped);
         on_request_minimize.connect(&toplevel->events.request_minimize);
+        on_new_popup.connect(&wlr_xdg_surface_try_from_wlr_surface(
+            deco_node->get_surface())->client->shell->events.new_popup);
         on_commit.connect(&toplevel->base->surface->events.commit);
         on_deco_destroy.connect(&toplevel->events.destroy);
         if (target_view->get_wlr_surface() &&
@@ -505,6 +527,7 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
         on_deco_destroy.disconnect();
         on_target_destroy.disconnect();
         on_target_unmapped.disconnect();
+        on_new_popup.disconnect();
         on_request_move.disconnect();
         on_request_resize.disconnect();
         on_request_minimize.disconnect();
@@ -720,7 +743,7 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
     deco_animation_t progression;
     wf::geometry_t from_geometry, to_geometry;
 
-    wf::wl_listener_wrapper on_commit, on_deco_destroy, on_target_destroy;
+    wf::wl_listener_wrapper on_commit, on_new_popup, on_deco_destroy, on_target_destroy;
     wf::wl_listener_wrapper on_request_move, on_request_resize, on_request_minimize;
     wf::wl_listener_wrapper on_request_deco_maximize, on_request_target_maximize;
     gtk4_decoration_tx_state deco_state = gtk4_decoration_tx_state::STABLE;
