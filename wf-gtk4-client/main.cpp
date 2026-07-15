@@ -297,8 +297,8 @@ static void add_tab_button(window_data *wdata, window_data *cdata)
 
     GtkDragSource *drag_source = gtk_drag_source_new();
     gtk_drag_source_set_actions(drag_source, GdkDragAction(GDK_ACTION_COPY | GDK_ACTION_MOVE));
-    g_signal_connect(drag_source, "prepare", G_CALLBACK(drag_prepare_cb), wdata);
-    g_signal_connect(drag_source, "drag-begin", G_CALLBACK(drag_begin_cb), wdata);
+    g_signal_connect(drag_source, "prepare", G_CALLBACK(drag_prepare_cb), cdata);
+    g_signal_connect(drag_source, "drag-begin", G_CALLBACK(drag_begin_cb), cdata);
     g_signal_connect(drag_source, "drag-end", G_CALLBACK(drag_end_cb), NULL);
     gtk_widget_add_controller(button, GTK_EVENT_CONTROLLER(drag_source));
 
