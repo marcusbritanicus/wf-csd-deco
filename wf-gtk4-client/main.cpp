@@ -140,18 +140,12 @@ static void scroll_sync(uint32_t group_id)
     }
 
     auto h_adj = gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(pdata->scrolled_window));
-    auto adj   = gtk_adjustment_new(gtk_adjustment_get_value(h_adj),
-        gtk_adjustment_get_lower(h_adj),
-        gtk_adjustment_get_upper(h_adj),
-        gtk_adjustment_get_step_increment(h_adj),
-        gtk_adjustment_get_page_increment(h_adj),
-        gtk_adjustment_get_page_size(h_adj));
 
     for (auto cdata : win_data)
     {
-        if (cdata.second->group.id == group_id)
+        if ((cdata.second->group.id == group_id) && (cdata.second.get() != pdata))
         {
-            gtk_scrolled_window_set_hadjustment(GTK_SCROLLED_WINDOW(cdata.second->scrolled_window), adj);
+            gtk_scrolled_window_set_hadjustment(GTK_SCROLLED_WINDOW(cdata.second->scrolled_window), h_adj);
         }
     }
 }
