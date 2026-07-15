@@ -593,7 +593,6 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
     {
         /*
          * The following code is for grouped windows only
-         * TODO: Support multiple groups
          */
         if (!group_id)
         {
@@ -615,14 +614,6 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
             }
         }
 
-        wayfire_view active_view = wf::get_core().seat->get_active_view();
-        /* Next, check if we should focus the view */
-        if ((target_view == active_view) && wf::toplevel_cast(target_view)->minimized &&
-            !target_view->get_root_node()->is_enabled())
-        {
-            select_window(target_view->get_id());
-        }
-
         /* Then, synchronize minimize and adjust enabled states */
         for (auto& v : wf::get_core().get_all_views())
         {
@@ -631,22 +622,27 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
                 continue;
             }
 
-            if (v == target_view)
+            auto data = wf::toplevel_cast(v)->toplevel()->get_data<gtk4_toplevel_custom_data>();
+            if (!data || !data->decoration)
             {
-                if (!v->get_root_node()->is_enabled())
-                {
-                    wf::scene::set_node_enabled(v->get_root_node(), true);
-                    wf::scene::set_node_enabled(v->get_root_node(), true);
-                }
-            } else
-            {
-                wf::toplevel_cast(v)->set_minimized(wf::toplevel_cast(target_view)->minimized);
-                if (v->get_root_node()->is_enabled())
-                {
-                    wf::scene::set_node_enabled(v->get_root_node(), false);
-                    wf::scene::set_node_enabled(v->get_root_node(), false);
-                }
+                continue;
             }
+
+            if (data->decoration->group_id != group_id)
+            {
+                continue;
+            }
+
+            if (v != target_view)
+            {
+                wf::scene::set_node_enabled(v->get_root_node(), wf::toplevel_cast(target_view)->minimized);
+                wf::toplevel_cast(v)->set_minimized(wf::toplevel_cast(target_view)->minimized);
+            }
+        }
+
+        if (!wf::toplevel_cast(target_view)->minimized)
+        {
+            wf::scene::set_node_enabled(target_view->get_root_node(), false);
         }
 
         /* Finally, reconnect the view_minimized signals for all views */
@@ -670,7 +666,6 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
     {
         /*
          * The following code is for grouped windows only
-         * TODO: Support multiple groups
          */
         if (!group_id)
         {
@@ -685,18 +680,27 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
                 continue;
             }
 
+            auto data = wf::toplevel_cast(v)->toplevel()->get_data<gtk4_toplevel_custom_data>();
+            if (!data || !data->decoration)
+            {
+                continue;
+            }
+
+            if (data->decoration->group_id != group_id)
+            {
+                continue;
+            }
+
             if (v == target_view)
             {
-                if (!v->get_root_node()->is_enabled())
+                while (!v->get_root_node()->is_enabled())
                 {
-                    wf::scene::set_node_enabled(v->get_root_node(), true);
                     wf::scene::set_node_enabled(v->get_root_node(), true);
                 }
             } else
             {
-                if (v->get_root_node()->is_enabled())
+                while (v->get_root_node()->is_enabled())
                 {
-                    wf::scene::set_node_enabled(v->get_root_node(), false);
                     wf::scene::set_node_enabled(v->get_root_node(), false);
                 }
             }
@@ -989,6 +993,8 @@ void do_group_windows(wl_client*, struct wl_resource*, uint32_t parent_id, uint3
     {
         child_data->decoration->set_hook(child->get_output(), from_geometry, to_geometry);
     }
+
+    wf::get_core().seat->focus_view(parent);
 }
 
 void select_window(uint32_t select_id)
