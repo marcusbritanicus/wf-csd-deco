@@ -310,12 +310,13 @@ static void add_tab_button(window_data *wdata, window_data *cdata)
 
     GtkGesture *click_gesture = gtk_gesture_click_new();
     gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(click_gesture), 1);
-    g_signal_connect(click_gesture, "pressed", G_CALLBACK(on_button_pressed), cdata);
+    gtk_event_controller_set_propagation_phase(GTK_EVENT_CONTROLLER(click_gesture), GTK_PHASE_CAPTURE);
+    g_signal_connect(click_gesture, "released", G_CALLBACK(on_button_pressed), cdata);
     gtk_widget_add_controller(button, GTK_EVENT_CONTROLLER(click_gesture));
 
     click_gesture = gtk_gesture_click_new();
     gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(click_gesture), 2);
-    g_signal_connect(click_gesture, "released", G_CALLBACK(on_button_released), cdata);
+    g_signal_connect(click_gesture, "pressed", G_CALLBACK(on_button_released), cdata);
     gtk_widget_add_controller(button, GTK_EVENT_CONTROLLER(click_gesture));
 
     gtk_widget_set_tooltip_text(button, cdata->title.c_str());
