@@ -218,12 +218,7 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
 
               case gtk4_decoration_tx_state::START:
                 this->deco_state = gtk4_decoration_tx_state::WAITING_FINAL;
-                if (!target_view->get_root_node()->is_enabled())
-                {
-                    wf::scene::set_node_enabled(target_view->get_root_node(), true);
-                    wf::scene::set_node_enabled(target_view->get_root_node(), true);
-                    wf::scene::update(target_view->get_root_node(), wf::scene::update_flag::REFOCUS);
-                }
+                wf::scene::update(target_view->get_root_node(), wf::scene::update_flag::REFOCUS);
 
                 break;
 
@@ -288,12 +283,7 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
             break;
         }
 
-        if (!target_view->get_root_node()->is_enabled())
-        {
-            wf::scene::set_node_enabled(target_view->get_root_node(), true);
-            wf::scene::set_node_enabled(target_view->get_root_node(), true);
-            wf::scene::update(target_view->get_root_node(), wf::scene::update_flag::REFOCUS);
-        }
+        wf::scene::update(target_view->get_root_node(), wf::scene::update_flag::REFOCUS);
     }
 
     void commit()
@@ -1521,9 +1511,6 @@ class gtk4_decoration_plugin : public wf::plugin_interface_t
             {
                 return;
             }
-
-            wf::scene::set_node_enabled(ev->view->get_root_node(), false);
-            wf::scene::set_node_enabled(ev->view->get_root_node(), false);
         }
     };
 
