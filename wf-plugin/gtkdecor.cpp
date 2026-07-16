@@ -1524,11 +1524,6 @@ class gtk4_decoration_plugin : public wf::plugin_interface_t
                 wf::get_core().protocols.decorator_manager,
                 WLR_SERVER_DECORATION_MANAGER_MODE_CLIENT);
             wf_decorator_manager_send_create_new_decoration(decorator_resource, ev->view->get_id());
-
-            if (wf::toplevel_cast(ev->view)->toplevel()->pending().fullscreen)
-            {
-                return;
-            }
         }
     };
 
