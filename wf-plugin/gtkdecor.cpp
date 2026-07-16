@@ -478,7 +478,7 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
 
         on_new_popup.set_callback([=] (void *data)
         {
-            auto popup = (decltype(toplevel->base->popup))data;
+            auto popup = (wlr_xdg_popup*)data;
 
             if (!popup)
             {
@@ -491,7 +491,17 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
             }
 
             popup->parent = target_view->get_wlr_surface();
+            on_map_popup.connect(&popup->base->surface->events.map);
             create_xdg_popup(popup);
+            current_popup = popup;
+        });
+
+        on_map_popup.set_callback([=] (void*)
+        {
+            auto popup = current_popup;
+
+            popup->base->current.geometry.y += margin_top - margin_bottom;
+            on_map_popup.disconnect();
         });
 
         on_request_move.connect(&toplevel->events.request_move);
@@ -540,6 +550,7 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
         on_target_destroy.disconnect();
         on_target_unmapped.disconnect();
         on_new_popup.disconnect();
+        on_map_popup.disconnect();
         on_request_move.disconnect();
         on_request_resize.disconnect();
         on_request_minimize.disconnect();
@@ -873,10 +884,11 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
     wlr_xdg_toplevel *toplevel;
 
     bool hook_set = false;
+    wlr_xdg_popup *current_popup;
     deco_animation_t progression;
     wf::geometry_t from_geometry, to_geometry;
 
-    wf::wl_listener_wrapper on_commit, on_new_popup, on_deco_destroy, on_target_destroy;
+    wf::wl_listener_wrapper on_commit, on_new_popup, on_map_popup, on_deco_destroy, on_target_destroy;
     wf::wl_listener_wrapper on_request_move, on_request_resize, on_request_minimize;
     wf::wl_listener_wrapper on_request_deco_maximize, on_request_target_maximize;
     gtk4_decoration_tx_state deco_state = gtk4_decoration_tx_state::STABLE;
