@@ -4,6 +4,10 @@
             <arg name="view" type="uint"/>
         </event>
 
+        <event name="destroy_decoration">
+            <arg name="view" type="uint"/>
+        </event>
+
         <request name="update_borders">
             <arg name="id"     type="uint"/>
             <arg name="top"    type="uint"/>
@@ -12,9 +16,31 @@
             <arg name="right"  type="uint"/>
         </request>
 
+        <request name="group_windows">
+            <arg name="parent_id" type="uint"/>
+            <arg name="child_id"  type="uint"/>
+        </request>
+
+        <request name="select_window">
+            <arg name="id" type="uint"/>
+        </request>
+
+        <request name="ungroup_window">
+            <arg name="id" type="uint"/>
+        </request>
+
+        <request name="close_request">
+            <arg name="id" type="uint"/>
+        </request>
+
         <event name="title_changed">
             <arg name="decoration" type="uint"/>
             <arg name="new_title" type="string"/>
+        </event>
+
+        <event name="app_id_changed">
+            <arg name="decoration" type="uint"/>
+            <arg name="new_app_id" type="string"/>
         </event>
     </interface>
 </protocol>
