@@ -1207,10 +1207,12 @@ const struct wf_decorator_manager_interface decorator_implementation =
     .close_request  = do_close_request
 };
 
-void unbind_decorator(wl_resource*)
+static wl_client *decorator_client;
+static void unbind_decorator(wl_resource*)
 {
     LOGD("Unbinding wf-decorator");
     decorator_resource = NULL;
+    decorator_client   = NULL;
 }
 
 static void handle_deco_client_destroy(struct wl_listener*, void*)
@@ -1253,7 +1255,16 @@ static void handle_deco_client_destroy(struct wl_listener*, void*)
             deco_node.reset();
         }
 
+        auto mask_node = data->decoration->mask_node.lock();
+        if (mask_node)
+        {
+            wf::scene::remove_child(mask_node);
+            mask_node.reset();
+        }
+
         data->decoration.reset();
+
+        wf::get_core().tx_manager->schedule_object(wf::toplevel_cast(v)->toplevel());
 
         v->damage();
     }
@@ -1266,7 +1277,7 @@ static void handle_deco_client_destroy(struct wl_listener*, void*)
     unbind_decorator(NULL);
 }
 
-static wl_client *decorator_client;
+wf::option_wrapper_t<bool> decorate_csd{"gtk4-decorator/decorate_csd"};
 void bind_decorator(wl_client *client, void*, uint32_t, uint32_t id)
 {
     if (decorator_resource)
@@ -1291,7 +1302,17 @@ void bind_decorator(wl_client *client, void*, uint32_t, uint32_t id)
 
     for (auto & view : wf::get_core().get_all_views())
     {
-        if (!wf::toplevel_cast(view) || !view->is_mapped())
+        if (view->get_app_id() == "org.wf.sample-decorator")
+        {
+            continue;
+        }
+
+        if ((view->role != wf::VIEW_ROLE_TOPLEVEL) || !view->is_mapped())
+        {
+            continue;
+        }
+
+        if (!bool(decorate_csd) && !wf::toplevel_cast(view)->should_be_decorated())
         {
             continue;
         }
@@ -1317,8 +1338,6 @@ void bind_decorator(wl_client *client, void*, uint32_t, uint32_t id)
 
 class gtk4_decoration_plugin : public wf::plugin_interface_t
 {
-    wf::option_wrapper_t<bool> decorate_csd{"gtk4-decorator/decorate_csd"};
-
   public:
     wl_global *decorator_global;
 
@@ -1496,9 +1515,8 @@ class gtk4_decoration_plugin : public wf::plugin_interface_t
             data->margin_offset.y = vg.y - bg.y;
             LOGD("margin_offsets: ", data->margin_offset.x, ",", data->margin_offset.y);
 
-            if (!decorate_csd && !wf::toplevel_cast(ev->view)->should_be_decorated())
+            if (!bool(decorate_csd) && !wf::toplevel_cast(ev->view)->should_be_decorated())
             {
-                LOGD("No double decorations");
                 return;
             }
 
@@ -1558,14 +1576,16 @@ class gtk4_decoration_plugin : public wf::plugin_interface_t
                 // In that case, we should just set the correct margins
                 if (auto deco = toplevel->get_data<gtk4_toplevel_custom_data>())
                 {
-                    if (!deco->decoration)
+                    if (deco && deco->decoration)
                     {
-                        continue;
+                        toplevel->pending().margins =
+                            toplevel->pending().fullscreen ? wf::decoration_margins_t{0, 0, 0,
+                            0} : deco_margins;
+                        ev->tx->add_object(deco->decoration);
+                    } else
+                    {
+                        toplevel->pending().margins = wf::decoration_margins_t{0, 0, 0, 0};
                     }
-
-                    toplevel->pending().margins =
-                        toplevel->pending().fullscreen ? wf::decoration_margins_t{0, 0, 0, 0} : deco_margins;
-                    ev->tx->add_object(deco->decoration);
                 }
             }
         }
@@ -1611,58 +1631,62 @@ class gtk4_decoration_plugin : public wf::plugin_interface_t
 
         decorate_csd.set_callback([=] ()
         {
-            if (decorator_resource)
+            for (auto& v : wf::get_core().get_all_views())
             {
-                for (auto& v : wf::get_core().get_all_views())
+                if (v->get_app_id() == "org.wf.sample-decorator")
                 {
-                    if (v->get_app_id() == "org.wf.sample-decorator")
+                    continue;
+                }
+
+                if (v->role != wf::VIEW_ROLE_TOPLEVEL)
+                {
+                    continue;
+                }
+
+                auto data = wf::toplevel_cast(v)->toplevel()->get_data<gtk4_toplevel_custom_data>();
+                if (data && data->decoration && !wf::toplevel_cast(v)->should_be_decorated() &&
+                    !bool(decorate_csd))
+                {
+                    data->decoration->handle_destroy();
+
+                    auto deco_node = data->decoration->deco_node;
+                    if (deco_node)
                     {
-                        continue;
+                        wf::scene::remove_child(deco_node);
+                        deco_node.reset();
                     }
 
-                    if (v->role != wf::VIEW_ROLE_TOPLEVEL)
+                    auto mask_node = data->decoration->mask_node.lock();
+                    if (mask_node)
                     {
-                        continue;
+                        wf::scene::remove_child(mask_node);
+                        mask_node.reset();
                     }
 
-                    auto data = wf::toplevel_cast(v)->toplevel()->get_data<gtk4_toplevel_custom_data>();
-                    if (data && data->decoration && !wf::toplevel_cast(v)->should_be_decorated() &&
-                        !decorate_csd)
+                    data->decoration.reset();
+
+                    wf::get_core().tx_manager->schedule_object(wf::toplevel_cast(v)->toplevel());
+
+                    v->damage();
+                }
+
+                data = wf::toplevel_cast(v)->toplevel()->get_data_safe<gtk4_toplevel_custom_data>();
+                if (data && !data->decoration && decorator_resource && bool(decorate_csd))
+                {
+                    wlr_server_decoration_manager_set_default_mode(
+                        wf::get_core().protocols.decorator_manager,
+                        WLR_SERVER_DECORATION_MANAGER_MODE_CLIENT);
+                    wf_decorator_manager_send_create_new_decoration(decorator_resource, v->get_id());
+
+                    if ((data->margin_offset.x == -1) && (data->margin_offset.y == -1))
                     {
-                        data->decoration->handle_destroy();
-
-                        auto deco_node = data->decoration->deco_node;
-                        if (deco_node)
-                        {
-                            wf::scene::remove_child(deco_node);
-                            deco_node.reset();
-                        }
-
-                        data->decoration.reset();
-
-                        v->damage();
+                        auto bg = v->get_bounding_box();
+                        auto vg = wf::toplevel_cast(v)->get_geometry();
+                        data->margin_offset.x = vg.x - bg.x;
+                        data->margin_offset.y = vg.y - bg.y;
                     }
 
-                    if (data && !data->decoration && decorate_csd)
-                    {
-                        wlr_server_decoration_manager_set_default_mode(
-                            wf::get_core().protocols.decorator_manager,
-                            WLR_SERVER_DECORATION_MANAGER_MODE_CLIENT);
-                        wf_decorator_manager_send_create_new_decoration(decorator_resource, v->get_id());
-
-                        auto data = wf::toplevel_cast(
-                            v)->toplevel()->get_data_safe<gtk4_toplevel_custom_data>();
-
-                        if ((data->margin_offset.x == -1) && (data->margin_offset.y == -1))
-                        {
-                            auto bg = v->get_bounding_box();
-                            auto vg = wf::toplevel_cast(v)->get_geometry();
-                            data->margin_offset.x = vg.x - bg.x;
-                            data->margin_offset.y = vg.y - bg.y;
-                        }
-
-                        LOGD("margin_offsets: ", data->margin_offset.x, ",", data->margin_offset.y);
-                    }
+                    LOGD("margin_offsets: ", data->margin_offset.x, ",", data->margin_offset.y);
                 }
             }
         });
@@ -1670,14 +1694,15 @@ class gtk4_decoration_plugin : public wf::plugin_interface_t
 
     void fini() override
     {
-        handle_deco_client_destroy(0, 0);
         wl_global_remove(decorator_global);
+        wl_client_flush(decorator_client);
+        wl_global_destroy(decorator_global);
+        handle_deco_client_destroy(0, 0);
         on_mapped.disconnect();
         on_pre_map.disconnect();
         on_fullscreen.disconnect();
         on_view_geometry_changed.disconnect();
         on_new_tx.disconnect();
-        wl_global_destroy(decorator_global);
     }
 };
 
