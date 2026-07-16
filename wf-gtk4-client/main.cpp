@@ -157,6 +157,12 @@ static void on_primary_button_released(GtkGestureClick *gesture,
     gpointer user_data)
 {
     auto wdata = (window_data*)user_data;
+    GtkWidget *widget = gtk_event_controller_get_widget(GTK_EVENT_CONTROLLER(gesture));
+
+    if (gtk_drag_source_get_drag(wdata->drag_source))
+    {
+        return;
+    }
 
     select_window(wdata->wf_id);
 }
@@ -240,6 +246,12 @@ static void group(window_data *drop_target_data, uint32_t wf_id)
     auto drag_source_data = win_data[view_to_decor[wf_id]];
     uint32_t group_id     = 1;
 
+    if (drag_source_data->group.id && (drag_source_data->group.id == drop_target_data->group.id))
+    {
+        g_print("Cannot add tab to the same group.\n");
+        return;
+    }
+
     ungroup(drag_source_data.get(), false);
     group_windows(drop_target_data->wf_id, wf_id);
 
@@ -290,7 +302,7 @@ static void add_tab_button(window_data *wdata, window_data *cdata)
 {
     GtkWidget *button = gtk_button_new_from_icon_name(cdata->app_id.c_str());
 
-    GtkDragSource *drag_source = gtk_drag_source_new();
+    auto drag_source = cdata->drag_source = gtk_drag_source_new();
     gtk_drag_source_set_actions(drag_source, GdkDragAction(GDK_ACTION_COPY | GDK_ACTION_MOVE));
     g_signal_connect(drag_source, "prepare", G_CALLBACK(drag_prepare_cb), cdata);
     g_signal_connect(drag_source, "drag-begin", G_CALLBACK(drag_begin_cb), cdata);
