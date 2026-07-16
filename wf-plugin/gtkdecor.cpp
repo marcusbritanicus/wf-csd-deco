@@ -1255,11 +1255,11 @@ static void handle_deco_client_destroy(struct wl_listener*, void*)
             deco_node.reset();
         }
 
-        auto mask_node = data->decoration->mask_node.lock();
-        if (mask_node)
+        auto root_node = data->decoration->root_node;
+        if (root_node)
         {
-            wf::scene::remove_child(mask_node);
-            mask_node.reset();
+            wf::scene::remove_child(root_node);
+            root_node.reset();
         }
 
         data->decoration.reset();
@@ -1656,11 +1656,11 @@ class gtk4_decoration_plugin : public wf::plugin_interface_t
                         deco_node.reset();
                     }
 
-                    auto mask_node = data->decoration->mask_node.lock();
-                    if (mask_node)
+                    auto root_node = data->decoration->root_node;
+                    if (root_node)
                     {
-                        wf::scene::remove_child(mask_node);
-                        mask_node.reset();
+                        wf::scene::remove_child(root_node);
+                        root_node.reset();
                     }
 
                     data->decoration.reset();
