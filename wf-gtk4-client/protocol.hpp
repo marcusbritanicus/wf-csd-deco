@@ -13,6 +13,7 @@ struct window_data
     GtkWidget *header_bar;
     GtkWidget *title_box;
     GtkWidget *tab_box;
+    GtkDragSource *drag_source;
     std::string app_id;
     std::string title;
     struct group_data

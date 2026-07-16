@@ -9,6 +9,12 @@ struct custom_data
     GtkWidget *area;
 };
 
+static void add_tab_button(window_data *wdata, window_data *cdata);
+static void clear_group_tabs(uint32_t group_id);
+static void reparent_group(uint32_t group_id, window_data *last_parent);
+static void refresh_group(uint32_t group_id);
+static void ungroup(window_data *wdata, bool notify_server);
+
 static void activate(GtkApplication *app, gpointer)
 {
     GdkDisplay *display = gdk_display_get_default();
@@ -16,12 +22,6 @@ static void activate(GtkApplication *app, gpointer)
 
     g_application_hold(G_APPLICATION(app));
 }
-
-static void on_button_released(GtkGestureClick *gesture,
-    int n_press,
-    double x,
-    double y,
-    gpointer user_data);
 
 static gboolean on_close_request(GtkWindow *window, gpointer data)
 {
@@ -41,7 +41,7 @@ static gboolean close_window(GtkWindow *window, gpointer data)
         return element.second == win;
     });
 
-    on_button_released(NULL, 0, 0, 0, win_data[(GtkWidget*)window].get());
+    ungroup(win_data[(GtkWidget*)window].get(), true);
 
     if (it != view_to_decor.end())
     {
@@ -150,7 +150,7 @@ static void scroll_sync(uint32_t group_id)
     }
 }
 
-static void on_button_pressed(GtkGestureClick *gesture,
+static void on_primary_button_released(GtkGestureClick *gesture,
     int n_press,
     double x,
     double y,
@@ -161,10 +161,15 @@ static void on_button_pressed(GtkGestureClick *gesture,
     select_window(wdata->wf_id);
 }
 
-static void add_tab_button(window_data *wdata, window_data *cdata);
-static void clear_group_tabs(uint32_t group_id);
-static void reparent_group(uint32_t group_id, window_data *last_parent);
-static void refresh_group(uint32_t group_id);
+static void on_middle_button_pressed(GtkGestureClick *gesture,
+    int n_press,
+    double x,
+    double y,
+    gpointer user_data)
+{
+    auto wdata = (window_data*)user_data;
+    ungroup(wdata, true);
+}
 
 int get_box_children_count(GtkWidget *box)
 {
@@ -281,16 +286,6 @@ static void group(window_data *drop_target_data, uint32_t wf_id)
     scroll_sync(group_id);
 }
 
-static void on_button_released(GtkGestureClick *gesture,
-    int n_press,
-    double x,
-    double y,
-    gpointer user_data)
-{
-    auto wdata = (window_data*)user_data;
-    ungroup(wdata, true);
-}
-
 static void add_tab_button(window_data *wdata, window_data *cdata)
 {
     GtkWidget *button = gtk_button_new_from_icon_name(cdata->app_id.c_str());
@@ -305,12 +300,12 @@ static void add_tab_button(window_data *wdata, window_data *cdata)
     GtkGesture *click_gesture = gtk_gesture_click_new();
     gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(click_gesture), 1);
     gtk_event_controller_set_propagation_phase(GTK_EVENT_CONTROLLER(click_gesture), GTK_PHASE_CAPTURE);
-    g_signal_connect(click_gesture, "released", G_CALLBACK(on_button_pressed), cdata);
+    g_signal_connect(click_gesture, "released", G_CALLBACK(on_primary_button_released), cdata);
     gtk_widget_add_controller(button, GTK_EVENT_CONTROLLER(click_gesture));
 
     click_gesture = gtk_gesture_click_new();
     gtk_gesture_single_set_button(GTK_GESTURE_SINGLE(click_gesture), 2);
-    g_signal_connect(click_gesture, "pressed", G_CALLBACK(on_button_released), cdata);
+    g_signal_connect(click_gesture, "pressed", G_CALLBACK(on_middle_button_pressed), cdata);
     gtk_widget_add_controller(button, GTK_EVENT_CONTROLLER(click_gesture));
 
     gtk_widget_set_tooltip_text(button, cdata->title.c_str());
