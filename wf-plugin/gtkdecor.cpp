@@ -949,7 +949,7 @@ void do_group_windows(wl_client*, struct wl_resource*, uint32_t parent_id, uint3
         }
 
         auto data = wf::toplevel_cast(v)->toplevel()->get_data<gtk4_toplevel_custom_data>();
-        if (data)
+        if (data && data->decoration)
         {
             if (data->decoration->group_id >= group_id)
             {
