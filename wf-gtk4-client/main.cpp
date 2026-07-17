@@ -116,36 +116,26 @@ static void drag_end_cb(GtkDragSource *source,
     g_print("Drag operation completed.\n");
 }
 
-static void scroll_sync(uint32_t group_id)
+static void scroll_sync(window_data *wdata)
 {
-    if (!group_id)
+    if (!wdata->group.id)
     {
         return;
     }
 
-    window_data *pdata = NULL;
-    for (auto cdata : win_data)
-    {
-        if ((cdata.second->group.id == group_id) && cdata.second->group.parent)
-        {
-            pdata = cdata.second.get();
-            break;
-        }
-    }
-
-    if (!pdata)
-    {
-        g_print("No parent in group?\n");
-        return;
-    }
-
-    auto h_adj = gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(pdata->scrolled_window));
+    auto h_adj = gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(wdata->scrolled_window));
+    auto adj   = gtk_adjustment_new(gtk_adjustment_get_value(h_adj),
+        gtk_adjustment_get_lower(h_adj),
+        gtk_adjustment_get_upper(h_adj),
+        gtk_adjustment_get_step_increment(h_adj),
+        gtk_adjustment_get_page_increment(h_adj),
+        gtk_adjustment_get_page_size(h_adj));
 
     for (auto cdata : win_data)
     {
-        if ((cdata.second->group.id == group_id) && (cdata.second.get() != pdata))
+        if (cdata.second->group.id == wdata->group.id)
         {
-            gtk_scrolled_window_set_hadjustment(GTK_SCROLLED_WINDOW(cdata.second->scrolled_window), h_adj);
+            gtk_scrolled_window_set_hadjustment(GTK_SCROLLED_WINDOW(cdata.second->scrolled_window), adj);
         }
     }
 }
@@ -220,6 +210,7 @@ static void ungroup(window_data *wdata, bool notify_server)
                     reparent_group(group_id, wdata);
                 }
 
+                scroll_sync(cdata.second.get());
                 break;
             }
         }
@@ -295,7 +286,7 @@ static void group(window_data *drop_target_data, uint32_t wf_id)
 
     clear_group_tabs(group_id);
     refresh_group(group_id);
-    scroll_sync(group_id);
+    scroll_sync(drop_target_data);
 }
 
 static void add_tab_button(window_data *wdata, window_data *cdata)
@@ -369,7 +360,7 @@ static void reparent_group(uint32_t group_id, window_data *last_parent)
             last_parent->group.parent  = false;
             last_parent->group.order.clear();
             last_parent->group.id = 0;
-            scroll_sync(group_id);
+            scroll_sync(wdata.second.get());
             break;
         }
     }
@@ -455,20 +446,7 @@ static gboolean on_scroll_cb(GtkEventControllerScroll *controller,
     gdouble dy,
     gpointer user_data)
 {
-    auto wdata    = (window_data*)user_data;
-    auto group_id = wdata->group.id;
-
-    if (group_id)
-    {
-        for (auto cdata : win_data)
-        {
-            if ((cdata.second->group.id == group_id) && cdata.second->group.parent)
-            {
-                wdata = cdata.second.get();
-                break;
-            }
-        }
-    }
+    auto wdata = (window_data*)user_data;
 
     GtkAdjustment *h_adj = gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(wdata->scrolled_window));
 
@@ -479,7 +457,7 @@ static gboolean on_scroll_cb(GtkEventControllerScroll *controller,
     gdouble upper = gtk_adjustment_get_upper(h_adj);
     new_value = CLAMP(new_value, lower, upper);
     gtk_adjustment_set_value(h_adj, new_value);
-    scroll_sync(group_id);
+    scroll_sync(wdata);
 
     return false;
 }
