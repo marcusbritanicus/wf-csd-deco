@@ -1691,7 +1691,6 @@ class gtk4_decoration_plugin : public wf::plugin_interface_t
     {
         wl_global_remove(decorator_global);
         wl_client_flush(decorator_client);
-        wl_global_destroy(decorator_global);
         handle_deco_client_destroy(0, 0);
         on_mapped.disconnect();
         on_pre_map.disconnect();
