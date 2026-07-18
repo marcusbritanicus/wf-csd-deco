@@ -62,6 +62,38 @@ wf::decoration_margins_t deco_margins =
 };
 
 using decoration_node_t = std::shared_ptr<wf::scene::wlr_surface_node_t>;
+std::unique_ptr<wf::scene::render_instance_manager_t> instance_manager = nullptr;
+
+wf::scene::damage_callback push_damage = [] (wf::regionf_t)
+{};
+
+void destroy_render_instance_manager()
+{
+    if (!instance_manager)
+    {
+        return;
+    }
+
+    instance_manager.reset();
+    instance_manager = nullptr;
+}
+
+void create_render_instance_manager(std::vector<wf::scene::node_ptr> nodes, wf::output_t *output)
+{
+    if (instance_manager || !output)
+    {
+        return;
+    }
+
+    wf::regionf_t region;
+    for (auto n : nodes)
+    {
+        region |= n->get_bounding_box();
+    }
+
+    instance_manager = std::make_unique<wf::scene::render_instance_manager_t>(nodes, push_damage, output);
+    instance_manager->set_visibility_region(region);
+}
 
 std::ostream& operator <<(std::ostream& out, const wf::dimensions_t& dims)
 {
@@ -931,6 +963,7 @@ void do_group_windows(wl_client*, struct wl_resource*, uint32_t parent_id, uint3
 
     ungroup_window(NULL, NULL, child_id, false);
 
+    std::vector<wf::scene::node_ptr> nodes;
     for (auto& v : wf::get_core().get_all_views())
     {
         if (v->role != wf::VIEW_ROLE_TOPLEVEL)
@@ -955,6 +988,8 @@ void do_group_windows(wl_client*, struct wl_resource*, uint32_t parent_id, uint3
             {
                 group_id = data->decoration->group_id + 1;
             }
+
+            nodes.push_back(v->get_root_node());
         }
     }
 
@@ -970,6 +1005,9 @@ void do_group_windows(wl_client*, struct wl_resource*, uint32_t parent_id, uint3
     {
         return;
     }
+
+    destroy_render_instance_manager();
+    create_render_instance_manager(nodes, parent->get_output());
 
     if (!parent_data->decoration->group_id)
     {
@@ -1131,7 +1169,9 @@ void ungroup_window(wl_client*, struct wl_resource*, uint32_t id, bool restore_p
         view_data->decoration->set_hook(view->get_output(), from_geometry, to_geometry);
     }
 
-    wayfire_view unhide_me = nullptr;
+    bool visible_view_found = false;
+    wayfire_view unhide_me  = nullptr;
+    std::vector<wf::scene::node_ptr> nodes;
     uint64_t last_group_focused_timestamp = 0;
     for (auto& v : wf::get_core().get_all_views())
     {
@@ -1147,7 +1187,7 @@ void ungroup_window(wl_client*, struct wl_resource*, uint32_t id, bool restore_p
             {
                 if (v->get_root_node()->is_enabled())
                 {
-                    return;
+                    visible_view_found = true;
                 }
 
                 if (wf::get_focus_timestamp(v) > last_group_focused_timestamp)
@@ -1156,10 +1196,15 @@ void ungroup_window(wl_client*, struct wl_resource*, uint32_t id, bool restore_p
                     unhide_me = v;
                 }
             }
+
+            nodes.push_back(v->get_root_node());
         }
     }
 
-    if (unhide_me)
+    destroy_render_instance_manager();
+    create_render_instance_manager(nodes, view->get_output());
+
+    if (unhide_me && !visible_view_found)
     {
         while (!unhide_me->get_root_node()->is_enabled())
         {
@@ -1689,6 +1734,7 @@ class gtk4_decoration_plugin : public wf::plugin_interface_t
 
     void fini() override
     {
+        destroy_render_instance_manager();
         wl_global_remove(decorator_global);
         wl_client_flush(decorator_client);
         handle_deco_client_destroy(0, 0);
