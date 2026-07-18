@@ -1745,7 +1745,11 @@ class gtk4_decoration_plugin : public wf::plugin_interface_t
         on_new_tx.disconnect();
         destroy_render_instance_manager();
         wl_global_remove(decorator_global);
-        wl_client_flush(decorator_client);
+        if (decorator_client)
+        {
+            wl_client_flush(decorator_client);
+        }
+
         handle_deco_client_destroy(0, 0);
     }
 };
