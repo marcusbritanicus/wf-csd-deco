@@ -54,6 +54,22 @@
 
 void create_xdg_popup(wlr_xdg_popup *popup);
 
+
+namespace wf
+{
+namespace gtk4_decorator
+{
+class gtk4_decoration_object_t;
+}
+}
+
+class gtk4_toplevel_custom_data : public wf::custom_data_t
+{
+  public:
+    std::shared_ptr<wf::gtk4_decorator::gtk4_decoration_object_t> decoration;
+    wf::point_t margin_offset;
+};
+
 namespace wf
 {
 namespace gtk4_decorator
@@ -195,14 +211,6 @@ wl_resource *decorator_resource = NULL;
 wl_listener deco_client_destroy_listener;
 void select_window(uint32_t select_id);
 void ungroup_window(wl_client*, struct wl_resource*, uint32_t id, bool closing);
-
-class gtk4_decoration_object_t;
-class gtk4_toplevel_custom_data : public wf::custom_data_t
-{
-  public:
-    std::shared_ptr<gtk4_decoration_object_t> decoration;
-    wf::point_t margin_offset;
-};
 
 class gtk4_decoration_object_t : public wf::txn::transaction_object_t
 {
@@ -1262,10 +1270,9 @@ static void unbind_decorator(wl_resource*)
 {
     LOGD("Unbinding wf-decorator");
     decorator_resource = NULL;
-    decorator_client   = NULL;
 }
 
-static void handle_deco_client_destroy(struct wl_listener*, void*)
+static void handle_deco_client_destroy(struct wl_listener *listener, void*)
 {
     LOGD("handle_deco_client_destroy");
     if (decorator_resource)
@@ -1325,6 +1332,10 @@ static void handle_deco_client_destroy(struct wl_listener*, void*)
     }
 
     unbind_decorator(NULL);
+    if (listener)
+    {
+        decorator_client = NULL;
+    }
 }
 
 wf::option_wrapper_t<bool> decorate_csd{"gtk4-decorator/decorate_csd"};
@@ -1777,6 +1788,7 @@ class gtk4_decoration_plugin : public wf::plugin_interface_t
         }
 
         handle_deco_client_destroy(0, 0);
+        wl_global_destroy(decorator_global);
     }
 };
 }
