@@ -8,13 +8,15 @@
 #include <QList>
 #include <QScrollArea>
 
-struct window_data {
+struct window_data
+{
     QWidget *scrolled_window;
     QWidget *tab_box;
     void *drag_source; // QDrag in Qt
     std::string app_id;
     std::string title;
-    struct group_data {
+    struct group_data
+    {
         uint32_t id;
         bool parent;
         QList<uint32_t> order;
@@ -38,7 +40,7 @@ void select_window(uint32_t id);
 void ungroup_window(uint32_t id);
 
 // Window management
-DecorationWindow* create_deco_window(uint32_t wf_id);
+DecorationWindow *create_deco_window(uint32_t wf_id);
 void destroy_deco_window(uint32_t wf_id);
 void set_title(QWidget *window, const char *title);
 void set_app_id(QWidget *window, const char *app_id);

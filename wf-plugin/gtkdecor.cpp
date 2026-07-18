@@ -42,6 +42,7 @@
 #include <type_traits>
 #include <wayfire/util.hpp>
 #include <wayfire/view.hpp>
+#include <wayfire/matcher.hpp>
 #include <wayfire/plugins/common/util.hpp>
 
 #include <wayfire/signal-definitions.hpp>
@@ -53,6 +54,26 @@
 
 void create_xdg_popup(wlr_xdg_popup *popup);
 
+
+namespace wf
+{
+namespace gtk4_decorator
+{
+class gtk4_decoration_object_t;
+}
+}
+
+class gtk4_toplevel_custom_data : public wf::custom_data_t
+{
+  public:
+    std::shared_ptr<wf::gtk4_decorator::gtk4_decoration_object_t> decoration;
+    wf::point_t margin_offset;
+};
+
+namespace wf
+{
+namespace gtk4_decorator
+{
 wf::decoration_margins_t deco_margins =
 {
     .left   = 0,
@@ -62,6 +83,38 @@ wf::decoration_margins_t deco_margins =
 };
 
 using decoration_node_t = std::shared_ptr<wf::scene::wlr_surface_node_t>;
+std::unique_ptr<wf::scene::render_instance_manager_t> instance_manager = nullptr;
+
+wf::scene::damage_callback push_damage = [] (wf::regionf_t)
+{};
+
+void destroy_render_instance_manager()
+{
+    if (!instance_manager)
+    {
+        return;
+    }
+
+    instance_manager.reset();
+    instance_manager = nullptr;
+}
+
+void create_render_instance_manager(std::vector<wf::scene::node_ptr> nodes, wf::output_t *output)
+{
+    if (instance_manager || !output)
+    {
+        return;
+    }
+
+    wf::regionf_t region;
+    for (auto n : nodes)
+    {
+        region |= n->get_bounding_box();
+    }
+
+    instance_manager = std::make_unique<wf::scene::render_instance_manager_t>(nodes, push_damage, output);
+    instance_manager->set_visibility_region(region);
+}
 
 std::ostream& operator <<(std::ostream& out, const wf::dimensions_t& dims)
 {
@@ -158,14 +211,6 @@ wl_resource *decorator_resource = NULL;
 wl_listener deco_client_destroy_listener;
 void select_window(uint32_t select_id);
 void ungroup_window(wl_client*, struct wl_resource*, uint32_t id, bool closing);
-
-class gtk4_decoration_object_t;
-class gtk4_toplevel_custom_data : public wf::custom_data_t
-{
-  public:
-    std::shared_ptr<gtk4_decoration_object_t> decoration;
-    wf::point_t margin_offset;
-};
 
 class gtk4_decoration_object_t : public wf::txn::transaction_object_t
 {
@@ -441,9 +486,10 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
             wf::get_core().default_wm->move_request(wf::toplevel_cast(target_view));
         });
 
-        on_request_resize.set_callback([=] (void*)
+        on_request_resize.set_callback([=] (void *data)
         {
-            wf::get_core().default_wm->resize_request(wf::toplevel_cast(target_view));
+            auto ev = static_cast<wlr_xdg_toplevel_resize_event*>(data);
+            wf::get_core().default_wm->resize_request(wf::toplevel_cast(target_view), ev->edges);
         });
 
         on_request_deco_maximize.set_callback([=] (void*)
@@ -857,8 +903,8 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
         wf::geometry_t cut_out = wf::geometry_t{
             .x     = bbox.x + margin_left,
             .y     = bbox.y + margin_top,
-            .width = bbox.width - margin_left - margin_right,
-            .height = bbox.height - margin_top - margin_bottom - 2,
+            .width = bbox.width - margin_left * 2,
+            .height = bbox.height - margin_top - margin_bottom,
         };
         masked->allowed ^= cut_out;
     }
@@ -914,7 +960,10 @@ void do_update_borders(wl_client*, struct wl_resource*, uint32_t id, uint32_t to
     bool use_csd = data->decoration->use_csd;
     LOGI(use_csd);
 
-    deco_margins.top = top - bottom + 1;
+    deco_margins.top    = top - left + 2;
+    deco_margins.bottom = right;
+    deco_margins.left   = right;
+    deco_margins.right  = right;
     data->decoration->set_margins(top, bottom, left, right, data->margin_offset);
     data->decoration->root_node->set_offset({double(use_csd ? -(l - data->margin_offset.x) : -l),
         double(use_csd ? -(t - data->margin_offset.y) : -t)});
@@ -931,6 +980,7 @@ void do_group_windows(wl_client*, struct wl_resource*, uint32_t parent_id, uint3
 
     ungroup_window(NULL, NULL, child_id, false);
 
+    std::vector<wf::scene::node_ptr> nodes;
     for (auto& v : wf::get_core().get_all_views())
     {
         if (v->role != wf::VIEW_ROLE_TOPLEVEL)
@@ -955,6 +1005,8 @@ void do_group_windows(wl_client*, struct wl_resource*, uint32_t parent_id, uint3
             {
                 group_id = data->decoration->group_id + 1;
             }
+
+            nodes.push_back(v->get_root_node());
         }
     }
 
@@ -970,6 +1022,9 @@ void do_group_windows(wl_client*, struct wl_resource*, uint32_t parent_id, uint3
     {
         return;
     }
+
+    destroy_render_instance_manager();
+    create_render_instance_manager(nodes, parent->get_output());
 
     if (!parent_data->decoration->group_id)
     {
@@ -1131,7 +1186,9 @@ void ungroup_window(wl_client*, struct wl_resource*, uint32_t id, bool restore_p
         view_data->decoration->set_hook(view->get_output(), from_geometry, to_geometry);
     }
 
-    wayfire_view unhide_me = nullptr;
+    bool visible_view_found = false;
+    wayfire_view unhide_me  = nullptr;
+    std::vector<wf::scene::node_ptr> nodes;
     uint64_t last_group_focused_timestamp = 0;
     for (auto& v : wf::get_core().get_all_views())
     {
@@ -1147,7 +1204,7 @@ void ungroup_window(wl_client*, struct wl_resource*, uint32_t id, bool restore_p
             {
                 if (v->get_root_node()->is_enabled())
                 {
-                    return;
+                    visible_view_found = true;
                 }
 
                 if (wf::get_focus_timestamp(v) > last_group_focused_timestamp)
@@ -1156,10 +1213,15 @@ void ungroup_window(wl_client*, struct wl_resource*, uint32_t id, bool restore_p
                     unhide_me = v;
                 }
             }
+
+            nodes.push_back(v->get_root_node());
         }
     }
 
-    if (unhide_me)
+    destroy_render_instance_manager();
+    create_render_instance_manager(nodes, view->get_output());
+
+    if (unhide_me && !visible_view_found)
     {
         while (!unhide_me->get_root_node()->is_enabled())
         {
@@ -1212,10 +1274,9 @@ static void unbind_decorator(wl_resource*)
 {
     LOGD("Unbinding wf-decorator");
     decorator_resource = NULL;
-    decorator_client   = NULL;
 }
 
-static void handle_deco_client_destroy(struct wl_listener*, void*)
+static void handle_deco_client_destroy(struct wl_listener *listener, void*)
 {
     LOGD("handle_deco_client_destroy");
     if (decorator_resource)
@@ -1275,9 +1336,36 @@ static void handle_deco_client_destroy(struct wl_listener*, void*)
     }
 
     unbind_decorator(NULL);
+    if (listener)
+    {
+        decorator_client = NULL;
+    }
 }
 
 wf::option_wrapper_t<bool> decorate_csd{"gtk4-decorator/decorate_csd"};
+wf::view_matcher_t ignore_views_match{"gtk4-decorator/ignore_views"};
+wf::option_wrapper_t<std::string> ignore_views_as_string{"gtk4-decorator/ignore_views"};
+
+static bool should_be_decorated(wayfire_view view)
+{
+    if (ignore_views_match.matches(view))
+    {
+        return false;
+    }
+
+    if (decorate_csd)
+    {
+        return true;
+    }
+
+    if (!decorate_csd && !wf::toplevel_cast(view)->should_be_decorated())
+    {
+        return false;
+    }
+
+    return true;
+}
+
 void bind_decorator(wl_client *client, void*, uint32_t, uint32_t id)
 {
     if (decorator_resource)
@@ -1312,7 +1400,7 @@ void bind_decorator(wl_client *client, void*, uint32_t, uint32_t id)
             continue;
         }
 
-        if (!bool(decorate_csd) && !wf::toplevel_cast(view)->should_be_decorated())
+        if (!should_be_decorated(view))
         {
             continue;
         }
@@ -1515,7 +1603,7 @@ class gtk4_decoration_plugin : public wf::plugin_interface_t
             data->margin_offset.y = vg.y - bg.y;
             LOGD("margin_offsets: ", data->margin_offset.x, ",", data->margin_offset.y);
 
-            if (!bool(decorate_csd) && !wf::toplevel_cast(ev->view)->should_be_decorated())
+            if (!should_be_decorated(ev->view))
             {
                 return;
             }
@@ -1624,7 +1712,7 @@ class gtk4_decoration_plugin : public wf::plugin_interface_t
         wf::get_core().connect(&on_view_geometry_changed);
         wf::get_core().tx_manager->connect(&on_new_tx);
 
-        decorate_csd.set_callback([=] ()
+        auto option_changed = [=] ()
         {
             for (auto& v : wf::get_core().get_all_views())
             {
@@ -1639,8 +1727,7 @@ class gtk4_decoration_plugin : public wf::plugin_interface_t
                 }
 
                 auto data = wf::toplevel_cast(v)->toplevel()->get_data<gtk4_toplevel_custom_data>();
-                if (data && data->decoration && !wf::toplevel_cast(v)->should_be_decorated() &&
-                    !bool(decorate_csd))
+                if (data && data->decoration && !should_be_decorated(v))
                 {
                     data->decoration->handle_destroy();
 
@@ -1666,7 +1753,7 @@ class gtk4_decoration_plugin : public wf::plugin_interface_t
                 }
 
                 data = wf::toplevel_cast(v)->toplevel()->get_data_safe<gtk4_toplevel_custom_data>();
-                if (data && !data->decoration && decorator_resource && bool(decorate_csd))
+                if (data && !data->decoration && decorator_resource && should_be_decorated(v))
                 {
                     wlr_server_decoration_manager_set_default_mode(
                         wf::get_core().protocols.decorator_manager,
@@ -1684,20 +1771,31 @@ class gtk4_decoration_plugin : public wf::plugin_interface_t
                     LOGD("margin_offsets: ", data->margin_offset.x, ",", data->margin_offset.y);
                 }
             }
-        });
+        };
+
+        decorate_csd.set_callback(option_changed);
+        ignore_views_as_string.set_callback(option_changed);
     }
 
     void fini() override
     {
-        wl_global_remove(decorator_global);
-        wl_client_flush(decorator_client);
-        handle_deco_client_destroy(0, 0);
         on_mapped.disconnect();
         on_pre_map.disconnect();
         on_fullscreen.disconnect();
         on_view_geometry_changed.disconnect();
         on_new_tx.disconnect();
+        destroy_render_instance_manager();
+        wl_global_remove(decorator_global);
+        if (decorator_client)
+        {
+            wl_client_flush(decorator_client);
+        }
+
+        handle_deco_client_destroy(0, 0);
+        wl_global_destroy(decorator_global);
     }
 };
+}
+}
 
-DECLARE_WAYFIRE_PLUGIN(gtk4_decoration_plugin);
+DECLARE_WAYFIRE_PLUGIN(wf::gtk4_decorator::gtk4_decoration_plugin);

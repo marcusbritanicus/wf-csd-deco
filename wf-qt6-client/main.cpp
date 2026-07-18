@@ -145,7 +145,7 @@ DecorationWindow::DecorationWindow(uint32_t id, QWidget *parent) :
     setMouseTracking(true);
 
     qCritical() << "Calling resize(...)";
-    resize(250, 250);
+    resize(300, 300);
 
     setupUI();
 
@@ -175,15 +175,15 @@ DecorationWindow::~DecorationWindow()
 
 void DecorationWindow::setupUI()
 {
-    QVBoxLayout *baseLyt = new QVBoxLayout();
-    baseLyt->setContentsMargins(QMargins(borderSize, 0, borderSize, borderSize));
+    baseLyt = new QVBoxLayout();
+    baseLyt->setContentsMargins(QMargins(defaultBorderSize, 0, defaultBorderSize, defaultBorderSize));
 
-    iconLbl = new QLabel(this);
+    iconLbl = new QLabel();
     iconLbl->setFixedSize(QSize(24, 24));
     iconLbl->setPixmap(QIcon::fromTheme("wayfire").pixmap(24));
 
-    titleLbl = new QLabel(this);
-    titleLbl->setText("__wf_qt_decorator");
+    titleLbl = new QLabel();
+    titleLbl->setStyleSheet("QLabel { color: #AAFFFFFF; }");
 
     minBtn = new QToolButton();
     minBtn->setFixedSize(QSize(24, 24));
@@ -215,7 +215,7 @@ void DecorationWindow::setupUI()
     closeBtn->setIcon(QIcon::fromTheme("window-close"));
     connect(closeBtn, &QToolButton::clicked, this, &QWidget::close);
 
-    clientArea = new QWidget(this);
+    clientArea = new QWidget();
     clientArea->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
     QHBoxLayout *titleLyt = new QHBoxLayout();
@@ -231,36 +231,9 @@ void DecorationWindow::setupUI()
     baseLyt->addLayout(titleLyt);
     baseLyt->addWidget(clientArea);
 
-    setMinimumHeight(34);
-
-    tabContainer = new QWidget(this);
+    tabContainer = new QWidget();
 
     setLayout(baseLyt);
-
-    // Install event filter on client area to detect resize
-    clientArea->installEventFilter(this);
-}
-
-void DecorationWindow::setClientSize(const QSize & clientSize)
-{
-    if (clientSize.isEmpty())
-    {
-        return;
-    }
-
-    isResizingFromCompositor = true;
-    pendingClientSize = clientSize;
-
-    // Calculate total window size (client + decoration)
-    QSize totalSize = clientSize;
-    totalSize.setHeight(clientSize.height() + titleBarHeight + borderSize * 2);
-    totalSize.setWidth(clientSize.width() + borderSize * 2);
-
-    // Resize the window
-    qCritical() << "Calling resize" << totalSize;
-    resize(totalSize);
-
-    isResizingFromCompositor = false;
 }
 
 void DecorationWindow::addTabButton(window_data *wdata, window_data *cdata)
@@ -569,41 +542,87 @@ void DecorationWindow::resizeEvent(QResizeEvent *event)
     QWidget::resizeEvent(event);
 
     // Update borders
-    update_borders(wf_id, titleBarHeight, borderSize, borderSize, borderSize);
+    QPoint relative_position = clientArea->mapTo(window(), QPoint(0, 0));
+    update_borders(wf_id, relative_position.y() - relative_position.x(),
+        relative_position.x(), relative_position.x(), relative_position.x());
 
     qCritical() << event->size();
 }
 
-bool DecorationWindow::eventFilter(QObject *obj, QEvent *event)
+// Map the mouse cursor position to the corresponding edges/corners
+Qt::Edges DecorationWindow::getEdgesAt(const QPoint & pos)
 {
-    if ((obj == this) && (event->type() == QEvent::Resize))
+    int padding     = 3;
+    Qt::Edges edges = {};
+    if (pos.x() <= defaultBorderSize + padding)
     {
-        QResizeEvent *resizeEvent = static_cast<QResizeEvent*>(event);
+        edges |= Qt::LeftEdge;
+    } else if (pos.x() >= width() - defaultBorderSize - padding)
+    {
+        edges |= Qt::RightEdge;
+    }
 
-        qCritical() << "resize event" << resizeEvent->size();
+    if (pos.y() <= defaultBorderSize + padding)
+    {
+        edges |= Qt::TopEdge;
+    } else if (pos.y() >= height() - defaultBorderSize - padding)
+    {
+        edges |= Qt::BottomEdge;
+    }
 
-        // Only send update_borders if this resize came from the compositor
-        // or if we're not in the middle of a compositor-triggered resize
-        if (!isResizingFromCompositor)
+    return edges;
+}
+
+// Update cursor to match the edge being hovered
+void DecorationWindow::updateCursorShape(const QPoint & pos)
+{
+    Qt::Edges edges = getEdgesAt(pos);
+    if (edges.testFlag(Qt::LeftEdge) && edges.testFlag(Qt::TopEdge))
+    {
+        setCursor(Qt::SizeFDiagCursor);
+    } else if (edges.testFlag(Qt::RightEdge) && edges.testFlag(Qt::BottomEdge))
+    {
+        setCursor(Qt::SizeFDiagCursor);
+    } else if (edges.testFlag(Qt::LeftEdge) && edges.testFlag(Qt::BottomEdge))
+    {
+        setCursor(Qt::SizeBDiagCursor);
+    } else if (edges.testFlag(Qt::RightEdge) && edges.testFlag(Qt::TopEdge))
+    {
+        setCursor(Qt::SizeBDiagCursor);
+    } else if (edges.testFlag(Qt::LeftEdge) || edges.testFlag(Qt::RightEdge))
+    {
+        setCursor(Qt::SizeHorCursor);
+    } else if (edges.testFlag(Qt::TopEdge) || edges.testFlag(Qt::BottomEdge))
+    {
+        setCursor(Qt::SizeVerCursor);
+    } else
+    {
+        setCursor(Qt::ArrowCursor);
+    }
+}
+
+void DecorationWindow::mousePressEvent(QMouseEvent *event)
+{
+    if (event->button() == Qt::LeftButton)
+    {
+        Qt::Edges edges = getEdgesAt(event->pos());
+        if (edges)
         {
-            // This resize came from the user or window manager
-            // Calculate client area size (total - decoration)
-            int clientHeight = resizeEvent->size().height() - titleBarHeight;
-            if (clientHeight < 0)
-            {
-                clientHeight = 0;
-            }
-
-            // Send the client area size to the compositor
-            // Note: This would be a custom protocol message if needed
-            update_borders(wf_id, titleBarHeight + borderSize, borderSize, borderSize, borderSize);
-
-            qDebug() << "Window resized by user. Client area:" <<
-                resizeEvent->size().width() << "x" << clientHeight;
+            // Delegate system resize
+            windowHandle()->startSystemResize(edges);
+        } else
+        {
+            windowHandle()->startSystemMove();
         }
     }
 
-    return QWidget::eventFilter(obj, event);
+    QWidget::mousePressEvent(event);
+}
+
+void DecorationWindow::mouseMoveEvent(QMouseEvent *event)
+{
+    updateCursorShape(event->pos());
+    QWidget::mouseMoveEvent(event);
 }
 
 void DecorationWindow::paintEvent(QPaintEvent *event)

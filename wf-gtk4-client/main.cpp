@@ -75,8 +75,51 @@ static void on_area_resized(GtkDrawingArea*, int w, int h, gpointer data)
 
     if (final_y > 0)
     {
-        update_borders(id, final_y, final_x, final_x, final_x);
+        update_borders(id, final_y, final_x + 3, final_x, 0);
     }
+}
+
+static GtkWidget *get_icon(std::string app_id)
+{
+    GtkWidget *image = nullptr;
+    auto theme = gtk_icon_theme_get_for_display(gdk_display_get_default());
+
+    auto _app_id = app_id;
+    auto dot_pos = _app_id.find_last_of(".");
+
+    auto lower_case_app_id = app_id;
+    for (char & c : lower_case_app_id)
+    {
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+
+    if (gtk_icon_theme_has_icon(theme, lower_case_app_id.c_str()))
+    {
+        image = gtk_image_new_from_icon_name(lower_case_app_id.c_str());
+    } else if ((dot_pos != std::string::npos) && (dot_pos < _app_id.length() - 1))
+    {
+        _app_id = _app_id.substr(dot_pos + 1);
+
+        if (gtk_icon_theme_has_icon(theme, _app_id.c_str()))
+        {
+            image = gtk_image_new_from_icon_name(_app_id.c_str());
+        }
+    } else if ((dot_pos != std::string::npos) && (dot_pos < lower_case_app_id.length() - 1))
+    {
+        _app_id = lower_case_app_id.substr(dot_pos + 1);
+
+        if (gtk_icon_theme_has_icon(theme, _app_id.c_str()))
+        {
+            image = gtk_image_new_from_icon_name(_app_id.c_str());
+        }
+    }
+
+    if (!image)
+    {
+        image = gtk_image_new_from_icon_name(app_id.c_str());
+    }
+
+    return image;
 }
 
 // --- Drag Source Setup ---
@@ -103,7 +146,7 @@ static void drag_begin_cb(GtkDragSource *source,
     g_print("Drag begin.\n");
     auto data = (window_data*)user_data;
     GtkDragIcon *drag_icon = GTK_DRAG_ICON(gtk_drag_icon_get_for_drag(drag));
-    GtkWidget *image = gtk_image_new_from_icon_name(data->app_id.c_str());
+    GtkWidget *image = get_icon(data->app_id);
     gtk_image_set_pixel_size(GTK_IMAGE(image), 48);
     gtk_drag_icon_set_child(drag_icon, image);
 }
@@ -116,36 +159,26 @@ static void drag_end_cb(GtkDragSource *source,
     g_print("Drag operation completed.\n");
 }
 
-static void scroll_sync(uint32_t group_id)
+static void scroll_sync(window_data *wdata)
 {
-    if (!group_id)
+    if (!wdata->group.id)
     {
         return;
     }
 
-    window_data *pdata = NULL;
-    for (auto cdata : win_data)
-    {
-        if ((cdata.second->group.id == group_id) && cdata.second->group.parent)
-        {
-            pdata = cdata.second.get();
-            break;
-        }
-    }
-
-    if (!pdata)
-    {
-        g_print("No parent in group?\n");
-        return;
-    }
-
-    auto h_adj = gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(pdata->scrolled_window));
+    auto h_adj = gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(wdata->scrolled_window));
+    auto adj   = gtk_adjustment_new(gtk_adjustment_get_value(h_adj),
+        gtk_adjustment_get_lower(h_adj),
+        gtk_adjustment_get_upper(h_adj),
+        gtk_adjustment_get_step_increment(h_adj),
+        gtk_adjustment_get_page_increment(h_adj),
+        gtk_adjustment_get_page_size(h_adj));
 
     for (auto cdata : win_data)
     {
-        if ((cdata.second->group.id == group_id) && (cdata.second.get() != pdata))
+        if (cdata.second->group.id == wdata->group.id)
         {
-            gtk_scrolled_window_set_hadjustment(GTK_SCROLLED_WINDOW(cdata.second->scrolled_window), h_adj);
+            gtk_scrolled_window_set_hadjustment(GTK_SCROLLED_WINDOW(cdata.second->scrolled_window), adj);
         }
     }
 }
@@ -220,6 +253,7 @@ static void ungroup(window_data *wdata, bool notify_server)
                     reparent_group(group_id, wdata);
                 }
 
+                scroll_sync(cdata.second.get());
                 break;
             }
         }
@@ -295,12 +329,13 @@ static void group(window_data *drop_target_data, uint32_t wf_id)
 
     clear_group_tabs(group_id);
     refresh_group(group_id);
-    scroll_sync(group_id);
+    scroll_sync(drop_target_data);
 }
 
 static void add_tab_button(window_data *wdata, window_data *cdata)
 {
-    GtkWidget *button = gtk_button_new_from_icon_name(cdata->app_id.c_str());
+    GtkWidget *button = gtk_button_new();
+    gtk_button_set_child(GTK_BUTTON(button), get_icon(cdata->app_id));
 
     auto drag_source = cdata->drag_source = gtk_drag_source_new();
     gtk_drag_source_set_actions(drag_source, GdkDragAction(GDK_ACTION_COPY | GDK_ACTION_MOVE));
@@ -369,7 +404,7 @@ static void reparent_group(uint32_t group_id, window_data *last_parent)
             last_parent->group.parent  = false;
             last_parent->group.order.clear();
             last_parent->group.id = 0;
-            scroll_sync(group_id);
+            scroll_sync(wdata.second.get());
             break;
         }
     }
@@ -455,20 +490,7 @@ static gboolean on_scroll_cb(GtkEventControllerScroll *controller,
     gdouble dy,
     gpointer user_data)
 {
-    auto wdata    = (window_data*)user_data;
-    auto group_id = wdata->group.id;
-
-    if (group_id)
-    {
-        for (auto cdata : win_data)
-        {
-            if ((cdata.second->group.id == group_id) && cdata.second->group.parent)
-            {
-                wdata = cdata.second.get();
-                break;
-            }
-        }
-    }
+    auto wdata = (window_data*)user_data;
 
     GtkAdjustment *h_adj = gtk_scrolled_window_get_hadjustment(GTK_SCROLLED_WINDOW(wdata->scrolled_window));
 
@@ -479,7 +501,7 @@ static gboolean on_scroll_cb(GtkEventControllerScroll *controller,
     gdouble upper = gtk_adjustment_get_upper(h_adj);
     new_value = CLAMP(new_value, lower, upper);
     gtk_adjustment_set_value(h_adj, new_value);
-    scroll_sync(group_id);
+    scroll_sync(wdata);
 
     return false;
 }
@@ -553,8 +575,7 @@ void set_app_id(GtkWidget *window, const char *app_id)
     auto wdata = win_data[window];
     wdata->app_id = app_id;
 
-    GtkWidget *image = gtk_image_new_from_icon_name(app_id);
-    gtk_header_bar_pack_start(GTK_HEADER_BAR(wdata->header_bar), image);
+    gtk_header_bar_pack_start(GTK_HEADER_BAR(wdata->header_bar), get_icon(std::string(app_id)));
 
     add_tab_button(wdata.get(), wdata.get());
 

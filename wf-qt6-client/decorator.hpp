@@ -40,20 +40,13 @@ class DecorationWindow : public QWidget
         return wf_id;
     }
 
-    // Get the size of the decoration (title bar)
-    int getDecorationHeight() const { return titleBarHeight; }
-
-    // Called when the compositor wants to resize the client area
-    void setClientSize(const QSize &clientSize);
-
   protected:
     void dragEnterEvent(QDragEnterEvent *event) override;
     void dropEvent(QDropEvent *event) override;
     void closeEvent(QCloseEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
-
-    // bool event(QEvent *event) override;
-    bool eventFilter(QObject *obj, QEvent *event) override;
+    void mousePressEvent(QMouseEvent *event) override;
+    void mouseMoveEvent(QMouseEvent *event) override;
 
     void paintEvent(QPaintEvent *pEvent) override;
 
@@ -74,8 +67,7 @@ class DecorationWindow : public QWidget
     QScrollArea *tabScrollArea;
     QWidget *tabContainer;
 
-    int titleBarHeight = 34;
-    int borderSize = 2;
+    QVBoxLayout *baseLyt;
     QPointer<QWidget> clientArea;
 
     QPointer<QLabel> iconLbl;
@@ -91,7 +83,7 @@ class DecorationWindow : public QWidget
     uint32_t groupId;
     QList<uint32_t> groupOrder;
 
-    // Flag to prevent recursive resizing
-    bool isResizingFromCompositor;
-    QSize pendingClientSize;
+    Qt::Edges getEdgesAt(const QPoint & pos);
+    void updateCursorShape(const QPoint & pos);
+    int defaultBorderSize = 2;
 };
