@@ -42,6 +42,7 @@
 #include <type_traits>
 #include <wayfire/util.hpp>
 #include <wayfire/view.hpp>
+#include <wayfire/matcher.hpp>
 #include <wayfire/plugins/common/util.hpp>
 
 #include <wayfire/signal-definitions.hpp>
@@ -1327,6 +1328,29 @@ static void handle_deco_client_destroy(struct wl_listener*, void*)
 }
 
 wf::option_wrapper_t<bool> decorate_csd{"gtk4-decorator/decorate_csd"};
+wf::view_matcher_t ignore_views_match{"gtk4-decorator/ignore_views"};
+wf::option_wrapper_t<std::string> ignore_views_as_string{"gtk4-decorator/ignore_views"};
+
+static bool should_be_decorated(wayfire_view view)
+{
+    if (ignore_views_match.matches(view))
+    {
+        return false;
+    }
+
+    if (decorate_csd)
+    {
+        return true;
+    }
+
+    if (!decorate_csd && !wf::toplevel_cast(view)->should_be_decorated())
+    {
+        return false;
+    }
+
+    return true;
+}
+
 void bind_decorator(wl_client *client, void*, uint32_t, uint32_t id)
 {
     if (decorator_resource)
@@ -1361,7 +1385,7 @@ void bind_decorator(wl_client *client, void*, uint32_t, uint32_t id)
             continue;
         }
 
-        if (!bool(decorate_csd) && !wf::toplevel_cast(view)->should_be_decorated())
+        if (!should_be_decorated(view))
         {
             continue;
         }
@@ -1564,7 +1588,7 @@ class gtk4_decoration_plugin : public wf::plugin_interface_t
             data->margin_offset.y = vg.y - bg.y;
             LOGD("margin_offsets: ", data->margin_offset.x, ",", data->margin_offset.y);
 
-            if (!bool(decorate_csd) && !wf::toplevel_cast(ev->view)->should_be_decorated())
+            if (!should_be_decorated(ev->view))
             {
                 return;
             }
@@ -1673,7 +1697,7 @@ class gtk4_decoration_plugin : public wf::plugin_interface_t
         wf::get_core().connect(&on_view_geometry_changed);
         wf::get_core().tx_manager->connect(&on_new_tx);
 
-        decorate_csd.set_callback([=] ()
+        auto option_changed = [=] ()
         {
             for (auto& v : wf::get_core().get_all_views())
             {
@@ -1688,8 +1712,7 @@ class gtk4_decoration_plugin : public wf::plugin_interface_t
                 }
 
                 auto data = wf::toplevel_cast(v)->toplevel()->get_data<gtk4_toplevel_custom_data>();
-                if (data && data->decoration && !wf::toplevel_cast(v)->should_be_decorated() &&
-                    !bool(decorate_csd))
+                if (data && data->decoration && !should_be_decorated(v))
                 {
                     data->decoration->handle_destroy();
 
@@ -1715,7 +1738,7 @@ class gtk4_decoration_plugin : public wf::plugin_interface_t
                 }
 
                 data = wf::toplevel_cast(v)->toplevel()->get_data_safe<gtk4_toplevel_custom_data>();
-                if (data && !data->decoration && decorator_resource && bool(decorate_csd))
+                if (data && !data->decoration && decorator_resource && should_be_decorated(v))
                 {
                     wlr_server_decoration_manager_set_default_mode(
                         wf::get_core().protocols.decorator_manager,
@@ -1733,7 +1756,10 @@ class gtk4_decoration_plugin : public wf::plugin_interface_t
                     LOGD("margin_offsets: ", data->margin_offset.x, ",", data->margin_offset.y);
                 }
             }
-        });
+        };
+
+        decorate_csd.set_callback(option_changed);
+        ignore_views_as_string.set_callback(option_changed);
     }
 
     void fini() override
