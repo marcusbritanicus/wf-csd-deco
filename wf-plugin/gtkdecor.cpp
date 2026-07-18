@@ -53,6 +53,10 @@
 
 void create_xdg_popup(wlr_xdg_popup *popup);
 
+namespace wf
+{
+namespace gtk4_decorator
+{
 wf::decoration_margins_t deco_margins =
 {
     .left   = 0,
@@ -1745,5 +1749,7 @@ class gtk4_decoration_plugin : public wf::plugin_interface_t
         on_new_tx.disconnect();
     }
 };
+}
+}
 
-DECLARE_WAYFIRE_PLUGIN(gtk4_decoration_plugin);
+DECLARE_WAYFIRE_PLUGIN(wf::gtk4_decorator::gtk4_decoration_plugin);
