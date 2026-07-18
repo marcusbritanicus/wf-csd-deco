@@ -57,22 +57,22 @@ void create_xdg_popup(wlr_xdg_popup *popup);
 
 namespace wf
 {
-namespace csd_decorator
+namespace gtk4_decorator
 {
-class csd_decoration_object_t;
+class gtk4_decoration_object_t;
 }
 }
 
-class csd_toplevel_custom_data : public wf::custom_data_t
+class gtk4_toplevel_custom_data : public wf::custom_data_t
 {
   public:
-    std::shared_ptr<wf::csd_decorator::csd_decoration_object_t> decoration;
+    std::shared_ptr<wf::gtk4_decorator::gtk4_decoration_object_t> decoration;
     wf::point_t margin_offset;
 };
 
 namespace wf
 {
-namespace csd_decorator
+namespace gtk4_decorator
 {
 wf::decoration_margins_t deco_margins =
 {
@@ -212,9 +212,9 @@ wl_listener deco_client_destroy_listener;
 void select_window(uint32_t select_id);
 void ungroup_window(wl_client*, struct wl_resource*, uint32_t id, bool closing);
 
-class csd_decoration_object_t : public wf::txn::transaction_object_t
+class gtk4_decoration_object_t : public wf::txn::transaction_object_t
 {
-    enum class csd_decoration_tx_state
+    enum class gtk4_decoration_tx_state
     {
         // No transactions in flight
         STABLE,
@@ -1342,9 +1342,9 @@ static void handle_deco_client_destroy(struct wl_listener *listener, void*)
     }
 }
 
-wf::option_wrapper_t<bool> decorate_csd{"csd-decorator/decorate_csd"};
-wf::view_matcher_t ignore_views_match{"csd-decorator/ignore_views"};
-wf::option_wrapper_t<std::string> ignore_views_as_string{"csd-decorator/ignore_views"};
+wf::option_wrapper_t<bool> decorate_csd{"gtk4-decorator/decorate_csd"};
+wf::view_matcher_t ignore_views_match{"gtk4-decorator/ignore_views"};
+wf::option_wrapper_t<std::string> ignore_views_as_string{"gtk4-decorator/ignore_views"};
 
 static bool should_be_decorated(wayfire_view view)
 {
@@ -1726,7 +1726,7 @@ class csd_decoration_plugin : public wf::plugin_interface_t
                     continue;
                 }
 
-                auto data = wf::toplevel_cast(v)->toplevel()->get_data<csd_toplevel_custom_data>();
+                auto data = wf::toplevel_cast(v)->toplevel()->get_data<gtk4_toplevel_custom_data>();
                 if (data && data->decoration && !should_be_decorated(v))
                 {
                     data->decoration->handle_destroy();
@@ -1752,7 +1752,7 @@ class csd_decoration_plugin : public wf::plugin_interface_t
                     v->damage();
                 }
 
-                data = wf::toplevel_cast(v)->toplevel()->get_data_safe<csd_toplevel_custom_data>();
+                data = wf::toplevel_cast(v)->toplevel()->get_data_safe<gtk4_toplevel_custom_data>();
                 if (data && !data->decoration && decorator_resource && should_be_decorated(v))
                 {
                     wlr_server_decoration_manager_set_default_mode(
@@ -1798,4 +1798,4 @@ class csd_decoration_plugin : public wf::plugin_interface_t
 }
 }
 
-DECLARE_WAYFIRE_PLUGIN(wf::csd_decorator::csd_decoration_plugin);
+DECLARE_WAYFIRE_PLUGIN(wf::gtk4_decorator::gtk4_decoration_plugin);
