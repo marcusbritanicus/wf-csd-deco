@@ -1738,15 +1738,15 @@ class gtk4_decoration_plugin : public wf::plugin_interface_t
 
     void fini() override
     {
-        destroy_render_instance_manager();
-        wl_global_remove(decorator_global);
-        wl_client_flush(decorator_client);
-        handle_deco_client_destroy(0, 0);
         on_mapped.disconnect();
         on_pre_map.disconnect();
         on_fullscreen.disconnect();
         on_view_geometry_changed.disconnect();
         on_new_tx.disconnect();
+        destroy_render_instance_manager();
+        wl_global_remove(decorator_global);
+        wl_client_flush(decorator_client);
+        handle_deco_client_destroy(0, 0);
     }
 };
 }
