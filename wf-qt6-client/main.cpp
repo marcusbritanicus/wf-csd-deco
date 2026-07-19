@@ -24,6 +24,7 @@
 #include <QSharedPointer>
 #include <QDebug>
 #include <QPainter>
+#include <QMenu>
 
 #include <qpa/qplatformnativeinterface.h>
 
@@ -31,108 +32,6 @@
 static QApplication *app;
 QMap<uint32_t, QWidget*> view_to_decor;
 QMap<QWidget*, QSharedPointer<window_data>> win_data;
-
-class TabDragSource : public QPushButton
-{
-    Q_OBJECT
-
-  public:
-    TabDragSource(window_data *data, QWidget *parent = nullptr) :
-        QPushButton(parent), wdata(data)
-    {}
-
-  protected:
-    void mousePressEvent(QMouseEvent *event) override
-    {
-        if (event->button() == Qt::LeftButton)
-        {
-            dragStartPos = event->pos();
-            QPushButton::mousePressEvent(event);
-        } else if (event->button() == Qt::MiddleButton)
-        {
-            // ungroup(wdata, true);
-            qCritical() << "ungroup";
-        }
-    }
-
-    void mouseMoveEvent(QMouseEvent *event) override
-    {
-        if (!(event->buttons() & Qt::LeftButton))
-        {
-            return;
-        }
-
-        if ((event->pos() - dragStartPos).manhattanLength() < QApplication::startDragDistance())
-        {
-            return;
-        }
-
-        QDrag *drag = new QDrag(this);
-        QMimeData *mimeData = new QMimeData;
-        mimeData->setData("application/x-wf-window-id",
-            QByteArray::number(wdata->wf_id));
-        drag->setMimeData(mimeData);
-
-        QPixmap pixmap = grab();
-        drag->setPixmap(pixmap);
-        drag->setHotSpot(event->pos());
-
-        drag->exec(Qt::CopyAction | Qt::MoveAction);
-    }
-
-    void mouseReleaseEvent(QMouseEvent *event) override
-    {
-        if (event->button() == Qt::LeftButton)
-        {
-            select_window(wdata->wf_id);
-        }
-
-        QPushButton::mouseReleaseEvent(event);
-    }
-
-  private:
-    window_data *wdata;
-    QPoint dragStartPos;
-};
-
-class DropTarget : public QWidget
-{
-    Q_OBJECT
-
-  public:
-    DropTarget(window_data *data, QWidget *parent = nullptr) :
-        QWidget(parent), wdata(data)
-    {
-        setAcceptDrops(true);
-    }
-
-  protected:
-    void dragEnterEvent(QDragEnterEvent *event) override
-    {
-        if (event->mimeData()->hasFormat("application/x-wf-window-id"))
-        {
-            event->acceptProposedAction();
-        }
-    }
-
-    void dropEvent(QDropEvent *event) override
-    {
-        if (event->mimeData()->hasFormat("application/x-wf-window-id"))
-        {
-            bool ok;
-            uint32_t wf_id = event->mimeData()->data("application/x-wf-window-id").toUInt(&ok);
-            if (ok && (wdata->wf_id != wf_id))
-            {
-                // group(wdata, wf_id);
-                qCritical() << "Group";
-                event->acceptProposedAction();
-            }
-        }
-    }
-
-  private:
-    window_data *wdata;
-};
 
 DecorationWindow::DecorationWindow(uint32_t id, QWidget *parent) :
     QWidget(parent), wf_id(id), isGroupParent(false), groupId(0)
@@ -176,7 +75,7 @@ void DecorationWindow::setupUI()
 {
     baseLyt = new QVBoxLayout();
     baseLyt->setContentsMargins(QMargins(defaultBorderSize, 0, defaultBorderSize, defaultBorderSize));
-    baseLyt->setSpacing( 0 );
+    baseLyt->setSpacing(0);
 
     iconLbl = new QLabel();
     iconLbl->setFixedSize(QSize(24, 24));
@@ -185,41 +84,41 @@ void DecorationWindow::setupUI()
     titleLbl = new QLabel();
     titleLbl->setStyleSheet("QLabel { color: #AAFFFFFF; }");
 
-    minBtn = new QToolButton();
+    minBtn = new DecorationButton(DecorationButton::Type::Minimize, this);
     minBtn->setFixedSize(QSize(24, 24));
-    minBtn->setIconSize(QSize(24, 24));
-    minBtn->setIcon(QIcon::fromTheme("window-minimize"));
-    connect(minBtn, &QToolButton::clicked, this, &QWidget::showMinimized);
+    minBtn->setMouseTracking(true);
+    connect(minBtn, &DecorationButton::clicked, this, &QWidget::showMinimized);
 
-    maxBtn = new QToolButton();
+    maxBtn = new DecorationButton(DecorationButton::Type::Maximize, this);
     maxBtn->setFixedSize(QSize(24, 24));
-    maxBtn->setIconSize(QSize(24, 24));
-    maxBtn->setIcon(QIcon::fromTheme("window-maximize"));
+    maxBtn->setMouseTracking(true);
     connect(
-        maxBtn, &QToolButton::clicked, [this] ()
+        maxBtn, &DecorationButton::clicked, [this] ()
     {
         if (isMaximized())
         {
+            qCritical() << "Show normal";
             showNormal();
-            maxBtn->setIcon(QIcon::fromTheme("window-maximize"));
+            // maxBtn->setIcon(QIcon::fromTheme("window-maximize"));
         } else
         {
+            qCritical() << "Show maximized";
             showMaximized();
-            maxBtn->setIcon(QIcon::fromTheme("window-restore"));
+            // maxBtn->setIcon(QIcon::fromTheme("window-restore"));
         }
     });
 
-    closeBtn = new QToolButton();
+    closeBtn = new DecorationButton(DecorationButton::Type::Close, this);
     closeBtn->setFixedSize(QSize(24, 24));
-    closeBtn->setIconSize(QSize(24, 24));
-    closeBtn->setIcon(QIcon::fromTheme("window-close"));
-    connect(closeBtn, &QToolButton::clicked, this, &QWidget::close);
+    closeBtn->setMouseTracking(true);
+    connect(closeBtn, &DecorationButton::clicked, this, &QWidget::close);
 
     clientArea = new QWidget();
     clientArea->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
     QHBoxLayout *titleLyt = new QHBoxLayout();
     titleLyt->setContentsMargins(QMargins(5, 5, 5, 5));
+    titleLyt->setSpacing(5);
 
     titleLyt->addWidget(iconLbl);
     titleLyt->addWidget(titleLbl);
@@ -508,6 +407,11 @@ void DecorationWindow::refreshGroup(uint32_t group_id)
     }
 }
 
+bool DecorationWindow::isOverButtons()
+{
+    return minBtn->isUnderMouse || maxBtn->isUnderMouse || closeBtn->isUnderMouse;
+}
+
 void DecorationWindow::dragEnterEvent(QDragEnterEvent *event)
 {
     if (event->mimeData()->hasFormat("application/x-wf-window-id"))
@@ -600,7 +504,7 @@ void DecorationWindow::updateCursorShape(const QPoint & pos)
 
 void DecorationWindow::mousePressEvent(QMouseEvent *event)
 {
-    if (event->button() == Qt::LeftButton)
+    if ((event->button() == Qt::LeftButton) && !isOverButtons())
     {
         Qt::Edges edges = getEdgesAt(event->pos());
         if (edges)
@@ -629,17 +533,17 @@ void DecorationWindow::paintEvent(QPaintEvent *event)
 
     painter.setPen(QPen(Qt::black, 2.0));
 
-    if (minBtn->underMouse())
+    if (minBtn->isUnderMouse)
     {
         painter.setPen(QPen(Qt::darkYellow, 2.0));
     }
 
-    if (maxBtn->underMouse())
+    if (maxBtn->isUnderMouse)
     {
         painter.setPen(QPen(Qt::darkBlue, 2.0));
     }
 
-    if (closeBtn->underMouse())
+    if (closeBtn->isUnderMouse)
     {
         painter.setPen(QPen(Qt::darkRed, 2.0));
     }
@@ -661,7 +565,12 @@ void DecorationWindow::setAppId(const QString & appId)
 {
     wdata->app_id = appId.toStdString();
     // Update icon
-    iconLbl->setPixmap(QIcon::fromTheme(appId).pixmap(24));
+    if ( QIcon::fromTheme(appId).pixmap(24) ) {
+        iconLbl->setPixmap(QIcon::fromTheme(appId).pixmap(24));
+    }
+    else {
+        iconLbl->setPixmap(QIcon::fromTheme(appId).pixmap(24));
+    }
 }
 
 int main(int argc, char *argv[])
