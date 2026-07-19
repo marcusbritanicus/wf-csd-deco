@@ -145,7 +145,7 @@ DecorationWindow::DecorationWindow(uint32_t id, QWidget *parent) :
     setMouseTracking(true);
 
     qCritical() << "Calling resize(...)";
-    resize(250, 250);
+    resize(300, 300);
 
     setupUI();
 
@@ -175,15 +175,15 @@ DecorationWindow::~DecorationWindow()
 
 void DecorationWindow::setupUI()
 {
-    QVBoxLayout *baseLyt = new QVBoxLayout();
-    baseLyt->setContentsMargins(QMargins(borderSize, 0, borderSize, borderSize));
+    int defaultBorderSize = 2;
+    baseLyt = new QVBoxLayout();
+    baseLyt->setContentsMargins(QMargins(defaultBorderSize, 0, defaultBorderSize, defaultBorderSize));
 
     iconLbl = new QLabel(this);
     iconLbl->setFixedSize(QSize(24, 24));
     iconLbl->setPixmap(QIcon::fromTheme("wayfire").pixmap(24));
 
     titleLbl = new QLabel(this);
-    // titleLbl->setText("__wf_qt_decorator");
 
     minBtn = new QToolButton();
     minBtn->setFixedSize(QSize(24, 24));
@@ -239,28 +239,6 @@ void DecorationWindow::setupUI()
 
     // Install event filter on client area to detect resize
     clientArea->installEventFilter(this);
-}
-
-void DecorationWindow::setClientSize(const QSize & clientSize)
-{
-    // if (clientSize.isEmpty())
-    // {
-    // return;
-    // }
-    //
-    // isResizingFromCompositor = true;
-    // pendingClientSize = clientSize;
-    //
-    //// Calculate total window size (client + decoration)
-    // QSize totalSize = clientSize;
-    // totalSize.setHeight(clientSize.height() + titleBarHeight + borderSize * 2);
-    // totalSize.setWidth(clientSize.width() + borderSize * 2);
-    //
-    //// Resize the window
-    // qCritical() << "Calling resize" << totalSize;
-    // resize(totalSize);
-    //
-    // isResizingFromCompositor = false;
 }
 
 void DecorationWindow::addTabButton(window_data *wdata, window_data *cdata)
@@ -569,7 +547,9 @@ void DecorationWindow::resizeEvent(QResizeEvent *event)
     QWidget::resizeEvent(event);
 
     // Update borders
-    update_borders(wf_id, titleBarHeight, borderSize, borderSize, borderSize);
+    QPoint relative_position = clientArea->mapTo(window(), QPoint(0, 0));
+    update_borders(wf_id, relative_position.y() - relative_position.x(),
+        relative_position.x(), relative_position.x(), relative_position.x());
 
     qCritical() << event->size();
 }
