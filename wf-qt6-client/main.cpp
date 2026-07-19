@@ -176,6 +176,7 @@ void DecorationWindow::setupUI()
 {
     baseLyt = new QVBoxLayout();
     baseLyt->setContentsMargins(QMargins(defaultBorderSize, 0, defaultBorderSize, defaultBorderSize));
+    baseLyt->setSpacing( 0 );
 
     iconLbl = new QLabel();
     iconLbl->setFixedSize(QSize(24, 24));
