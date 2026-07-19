@@ -486,9 +486,10 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
             wf::get_core().default_wm->move_request(wf::toplevel_cast(target_view));
         });
 
-        on_request_resize.set_callback([=] (void*)
+        on_request_resize.set_callback([=] (void *data)
         {
-            wf::get_core().default_wm->resize_request(wf::toplevel_cast(target_view));
+            auto ev = static_cast<wlr_xdg_toplevel_resize_event*>(data);
+            wf::get_core().default_wm->resize_request(wf::toplevel_cast(target_view), ev->edges);
         });
 
         on_request_deco_maximize.set_callback([=] (void*)
