@@ -184,6 +184,7 @@ void DecorationWindow::setupUI()
     iconLbl->setPixmap(QIcon::fromTheme("wayfire").pixmap(24));
 
     titleLbl = new QLabel(this);
+    titleLbl->setStyleSheet("QLabel { color: #AAFFFFFF; }");
 
     minBtn = new QToolButton();
     minBtn->setFixedSize(QSize(24, 24));
