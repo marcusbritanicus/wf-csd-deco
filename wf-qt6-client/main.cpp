@@ -572,7 +572,7 @@ void DecorationWindow::setAppId(const QString & appId)
         iconLbl->setPixmap(QIcon::fromTheme("wayfire").pixmap(24));
     }
     else {
-        iconLbl->setPixmap(QIcon(":wayfire.png").pixmap(24))
+        iconLbl->setPixmap(QIcon(":wayfire.png").pixmap(24));
     }
 }
 
