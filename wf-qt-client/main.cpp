@@ -178,11 +178,11 @@ void DecorationWindow::setupUI()
     baseLyt = new QVBoxLayout();
     baseLyt->setContentsMargins(QMargins(defaultBorderSize, 0, defaultBorderSize, defaultBorderSize));
 
-    iconLbl = new QLabel(this);
+    iconLbl = new QLabel();
     iconLbl->setFixedSize(QSize(24, 24));
     iconLbl->setPixmap(QIcon::fromTheme("wayfire").pixmap(24));
 
-    titleLbl = new QLabel(this);
+    titleLbl = new QLabel();
     titleLbl->setStyleSheet("QLabel { color: #AAFFFFFF; }");
 
     minBtn = new QToolButton();
@@ -215,7 +215,7 @@ void DecorationWindow::setupUI()
     closeBtn->setIcon(QIcon::fromTheme("window-close"));
     connect(closeBtn, &QToolButton::clicked, this, &QWidget::close);
 
-    clientArea = new QWidget(this);
+    clientArea = new QWidget();
     clientArea->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
     QHBoxLayout *titleLyt = new QHBoxLayout();
@@ -231,12 +231,9 @@ void DecorationWindow::setupUI()
     baseLyt->addLayout(titleLyt);
     baseLyt->addWidget(clientArea);
 
-    tabContainer = new QWidget(this);
+    tabContainer = new QWidget();
 
     setLayout(baseLyt);
-
-    // Install event filter on client area to detect resize
-    clientArea->installEventFilter(this);
 }
 
 void DecorationWindow::addTabButton(window_data *wdata, window_data *cdata)
