@@ -144,7 +144,6 @@ DecorationWindow::DecorationWindow(uint32_t id, QWidget *parent) :
 
     setMouseTracking(true);
 
-    qCritical() << "Calling resize(...)";
     resize(300, 300);
 
     setupUI();
@@ -538,15 +537,12 @@ void DecorationWindow::closeEvent(QCloseEvent *event)
 
 void DecorationWindow::resizeEvent(QResizeEvent *event)
 {
-    qCritical() << "resizeEvent(...)";
     QWidget::resizeEvent(event);
 
     // Update borders
     QPoint relative_position = clientArea->mapTo(window(), QPoint(0, 0));
     update_borders(wf_id, relative_position.y() - relative_position.x(),
         relative_position.x(), relative_position.x(), relative_position.x());
-
-    qCritical() << event->size();
 }
 
 // Map the mouse cursor position to the corresponding edges/corners
