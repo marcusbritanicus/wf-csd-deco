@@ -552,19 +552,20 @@ void DecorationWindow::resizeEvent(QResizeEvent *event)
 // Map the mouse cursor position to the corresponding edges/corners
 Qt::Edges DecorationWindow::getEdgesAt(const QPoint & pos)
 {
+    int padding     = 3;
     Qt::Edges edges = {};
-    if (pos.x() <= defaultBorderSize)
+    if (pos.x() <= defaultBorderSize + padding)
     {
         edges |= Qt::LeftEdge;
-    } else if (pos.x() >= width() - defaultBorderSize)
+    } else if (pos.x() >= width() - defaultBorderSize - padding)
     {
         edges |= Qt::RightEdge;
     }
 
-    if (pos.y() <= defaultBorderSize)
+    if (pos.y() <= defaultBorderSize + padding)
     {
         edges |= Qt::TopEdge;
-    } else if (pos.y() >= height() - defaultBorderSize)
+    } else if (pos.y() >= height() - defaultBorderSize - padding)
     {
         edges |= Qt::BottomEdge;
     }

@@ -138,13 +138,17 @@ class gtk4_mask_node_t : public wf::scene::floating_inner_node_t
   public:
     // The rendered part of the decoration which does not include the client buffer area
     wf::regionf_t allowed;
+    wf::regionf_t deco_geometry;
 
     gtk4_mask_node_t() : floating_inner_node_t(false)
     {}
 
     std::optional<wf::scene::input_node_t> find_node_at(const wf::pointf_t& at) override
     {
-        if (allowed.contains_pointf(at))
+        auto padding = 3;
+        auto input_region = deco_geometry;
+        input_region.expand_edges(padding);
+        if (input_region.contains_pointf(at))
         {
             return wf::scene::floating_inner_node_t::find_node_at(at);
         }
@@ -899,7 +903,7 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
 
         auto bbox = deco_node->get_bounding_box();
 
-        masked->allowed = bbox;
+        masked->deco_geometry = masked->allowed = bbox;
         wf::geometry_t cut_out = wf::geometry_t{
             .x     = bbox.x + margin_left,
             .y     = bbox.y + margin_top,
@@ -907,6 +911,15 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
             .height = bbox.height - margin_top - margin_bottom,
         };
         masked->allowed ^= cut_out;
+
+        auto padding = 5;
+        cut_out = wf::geometry_t{
+            .x     = bbox.x + padding,
+            .y     = bbox.y + padding,
+            .width = bbox.width - padding * 2,
+            .height = bbox.height - padding * 2,
+        };
+        masked->deco_geometry ^= cut_out;
     }
 
     double margin_left   = 0;
