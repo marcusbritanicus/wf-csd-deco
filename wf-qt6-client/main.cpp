@@ -665,9 +665,8 @@ void DecorationWindow::resizeEvent(QResizeEvent *event)
 {
     QWidget::resizeEvent(event);
 
-    QPoint relative_position = clientArea->mapTo(window(), QPoint(0, 0));
-    update_borders(wf_id, relative_position.y() - relative_position.x(),
-        relative_position.x(), relative_position.x(), relative_position.x());
+    QPoint pos = clientArea->mapTo(window(), QPoint(0, 0));
+    update_borders(wf_id, pos.y(), defaultBorderSize, defaultBorderSize, defaultBorderSize);
 }
 
 Qt::Edges DecorationWindow::getEdgesAt(const QPoint & pos)
