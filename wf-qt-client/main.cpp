@@ -175,7 +175,6 @@ DecorationWindow::~DecorationWindow()
 
 void DecorationWindow::setupUI()
 {
-    int defaultBorderSize = 2;
     baseLyt = new QVBoxLayout();
     baseLyt->setContentsMargins(QMargins(defaultBorderSize, 0, defaultBorderSize, defaultBorderSize));
 
@@ -555,11 +554,101 @@ void DecorationWindow::resizeEvent(QResizeEvent *event)
     qCritical() << event->size();
 }
 
+// Map the mouse cursor position to the corresponding edges/corners
+Qt::Edges DecorationWindow::getEdgesAt(const QPoint & pos)
+{
+    Qt::Edges edges = {};
+    if (pos.x() <= defaultBorderSize)
+    {
+        edges |= Qt::LeftEdge;
+    }
+
+    if (pos.x() >= width() - defaultBorderSize)
+    {
+        edges |= Qt::RightEdge;
+    }
+
+    if (pos.y() <= defaultBorderSize)
+    {
+        edges |= Qt::TopEdge;
+    }
+
+    if (pos.y() >= height() - defaultBorderSize)
+    {
+        edges |= Qt::BottomEdge;
+    }
+
+    return edges;
+}
+
+// Update cursor to match the edge being hovered
+void DecorationWindow::updateCursorShape(const QPoint & pos)
+{
+    if (isResizing)
+    {
+        return;
+    }
+
+    Qt::Edges edges = getEdgesAt(pos);
+    if (edges.testFlag(Qt::LeftEdge) && edges.testFlag(Qt::TopEdge))
+    {
+        setCursor(Qt::SizeFDiagCursor);
+    } else if (edges.testFlag(Qt::RightEdge) && edges.testFlag(Qt::BottomEdge))
+    {
+        setCursor(Qt::SizeFDiagCursor);
+    } else if (edges.testFlag(Qt::LeftEdge) && edges.testFlag(Qt::BottomEdge))
+    {
+        setCursor(Qt::SizeBDiagCursor);
+    } else if (edges.testFlag(Qt::RightEdge) && edges.testFlag(Qt::TopEdge))
+    {
+        setCursor(Qt::SizeBDiagCursor);
+    } else if (edges.testFlag(Qt::LeftEdge) || edges.testFlag(Qt::RightEdge))
+    {
+        setCursor(Qt::SizeHorCursor);
+    } else if (edges.testFlag(Qt::TopEdge) || edges.testFlag(Qt::BottomEdge))
+    {
+        setCursor(Qt::SizeVerCursor);
+    } else
+    {
+        setCursor(Qt::ArrowCursor);
+    }
+}
+
 void DecorationWindow::mousePressEvent(QMouseEvent *event)
 {
-    qCritical() << "mouseEvent(...)";
+    if (event->button() == Qt::LeftButton)
+    {
+        Qt::Edges edges = getEdgesAt(event->pos());
+        if (edges != 0)
+        {
+            isResizing  = true;
+            resizeEdges = edges;
+            // Delegate system resize
+            windowHandle()->startSystemResize(resizeEdges);
+        } else
+        {
+            windowHandle()->startSystemMove();
+        }
+    }
+
     QWidget::mousePressEvent(event);
-    window()->windowHandle()->startSystemMove();
+}
+
+void DecorationWindow::mouseMoveEvent(QMouseEvent *event)
+{
+    updateCursorShape(event->pos());
+    QWidget::mouseMoveEvent(event);
+}
+
+void DecorationWindow::mouseReleaseEvent(QMouseEvent *event)
+{
+    if ((event->button() == Qt::LeftButton) && isResizing)
+    {
+        isResizing  = false;
+        resizeEdges = {};
+    }
+
+    QWidget::mouseReleaseEvent(event);
 }
 
 void DecorationWindow::paintEvent(QPaintEvent *event)

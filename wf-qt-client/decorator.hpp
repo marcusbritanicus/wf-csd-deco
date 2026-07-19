@@ -46,6 +46,9 @@ class DecorationWindow : public QWidget
     void closeEvent(QCloseEvent *event) override;
     void resizeEvent(QResizeEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
+    void mouseMoveEvent(QMouseEvent *event) override;
+    void mouseReleaseEvent(QMouseEvent *event) override;
+    bool m_isResizing;
 
     void paintEvent(QPaintEvent *pEvent) override;
 
@@ -82,7 +85,10 @@ class DecorationWindow : public QWidget
     uint32_t groupId;
     QList<uint32_t> groupOrder;
 
-    // Flag to prevent recursive resizing
-    bool isResizingFromCompositor;
-    QSize pendingClientSize;
+    Qt::Edges getEdgesAt(const QPoint & pos);
+    void updateCursorShape(const QPoint & pos);
+
+    bool isResizing = false;
+    Qt::Edges resizeEdges;
+    int defaultBorderSize = 2;
 };
