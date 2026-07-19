@@ -11,7 +11,7 @@ static uint32_t decorator_global_id;
 
 // Forward declarations
 extern QMap<uint32_t, QWidget*> view_to_decor;
-extern QMap<QWidget*, QSharedPointer<window_data>> win_data;
+extern QMap<QWidget*, QSharedPointer<WindowData>> winData;
 
 static void create_new_decoration(void*, wf_decorator_manager*, uint32_t view_id)
 {

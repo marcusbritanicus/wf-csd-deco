@@ -8,14 +8,11 @@
 #include <QList>
 #include <QScrollArea>
 
-struct window_data
+struct WindowData
 {
-    QWidget *scrolled_window;
-    QWidget *tab_box;
-    void *drag_source; // QDrag in Qt
     std::string app_id;
     std::string title;
-    struct group_data
+    struct GroupData
     {
         uint32_t id;
         bool parent;
@@ -29,7 +26,7 @@ class DecorationWindow;
 
 // Global data
 extern QMap<uint32_t, QWidget*> view_to_decor;
-extern QMap<QWidget*, QSharedPointer<window_data>> win_data;
+extern QMap<QWidget*, QSharedPointer<WindowData>> winData;
 
 // Protocol functions
 void setup_protocol(void *display);
