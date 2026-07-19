@@ -565,11 +565,14 @@ void DecorationWindow::setAppId(const QString & appId)
 {
     wdata->app_id = appId.toStdString();
     // Update icon
-    if ( QIcon::fromTheme(appId).pixmap(24) ) {
+    if ( QIcon::hasThemeIcon(appId) ) {
         iconLbl->setPixmap(QIcon::fromTheme(appId).pixmap(24));
     }
+    else if ( QIcon::hasThemeIcon("wayfire") ) {
+        iconLbl->setPixmap(QIcon::fromTheme("wayfire").pixmap(24));
+    }
     else {
-        iconLbl->setPixmap(QIcon::fromTheme(appId).pixmap(24));
+        iconLbl->setPixmap(QIcon(":wayfire.png").pixmap(24))
     }
 }
 
