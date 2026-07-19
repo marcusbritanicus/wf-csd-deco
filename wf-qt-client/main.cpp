@@ -231,8 +231,6 @@ void DecorationWindow::setupUI()
     baseLyt->addLayout(titleLyt);
     baseLyt->addWidget(clientArea);
 
-    setMinimumHeight(34);
-
     tabContainer = new QWidget(this);
 
     setLayout(baseLyt);
@@ -561,9 +559,7 @@ Qt::Edges DecorationWindow::getEdgesAt(const QPoint & pos)
     if (pos.x() <= defaultBorderSize)
     {
         edges |= Qt::LeftEdge;
-    }
-
-    if (pos.x() >= width() - defaultBorderSize)
+    } else if (pos.x() >= width() - defaultBorderSize)
     {
         edges |= Qt::RightEdge;
     }
@@ -571,9 +567,7 @@ Qt::Edges DecorationWindow::getEdgesAt(const QPoint & pos)
     if (pos.y() <= defaultBorderSize)
     {
         edges |= Qt::TopEdge;
-    }
-
-    if (pos.y() >= height() - defaultBorderSize)
+    } else if (pos.y() >= height() - defaultBorderSize)
     {
         edges |= Qt::BottomEdge;
     }
@@ -584,11 +578,6 @@ Qt::Edges DecorationWindow::getEdgesAt(const QPoint & pos)
 // Update cursor to match the edge being hovered
 void DecorationWindow::updateCursorShape(const QPoint & pos)
 {
-    if (isResizing)
-    {
-        return;
-    }
-
     Qt::Edges edges = getEdgesAt(pos);
     if (edges.testFlag(Qt::LeftEdge) && edges.testFlag(Qt::TopEdge))
     {
@@ -619,12 +608,10 @@ void DecorationWindow::mousePressEvent(QMouseEvent *event)
     if (event->button() == Qt::LeftButton)
     {
         Qt::Edges edges = getEdgesAt(event->pos());
-        if (edges != 0)
+        if (edges)
         {
-            isResizing  = true;
-            resizeEdges = edges;
             // Delegate system resize
-            windowHandle()->startSystemResize(resizeEdges);
+            windowHandle()->startSystemResize(edges);
         } else
         {
             windowHandle()->startSystemMove();
@@ -638,17 +625,6 @@ void DecorationWindow::mouseMoveEvent(QMouseEvent *event)
 {
     updateCursorShape(event->pos());
     QWidget::mouseMoveEvent(event);
-}
-
-void DecorationWindow::mouseReleaseEvent(QMouseEvent *event)
-{
-    if ((event->button() == Qt::LeftButton) && isResizing)
-    {
-        isResizing  = false;
-        resizeEdges = {};
-    }
-
-    QWidget::mouseReleaseEvent(event);
 }
 
 void DecorationWindow::paintEvent(QPaintEvent *event)

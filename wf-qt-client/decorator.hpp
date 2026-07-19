@@ -47,8 +47,6 @@ class DecorationWindow : public QWidget
     void resizeEvent(QResizeEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
-    void mouseReleaseEvent(QMouseEvent *event) override;
-    bool m_isResizing;
 
     void paintEvent(QPaintEvent *pEvent) override;
 
@@ -87,8 +85,5 @@ class DecorationWindow : public QWidget
 
     Qt::Edges getEdgesAt(const QPoint & pos);
     void updateCursorShape(const QPoint & pos);
-
-    bool isResizing = false;
-    Qt::Edges resizeEdges;
     int defaultBorderSize = 2;
 };
