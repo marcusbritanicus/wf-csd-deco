@@ -1,13 +1,18 @@
 <?xml version="1.0"?>
 <wayfire>
-	<plugin name="gtk4-decorator">
-		<_short>GTK4 Decorator</_short>
-		<_long>Use gtk4 themed decorations.</_long>
+	<plugin name="csd-decorator">
+		<_short>CSD Decorator</_short>
+		<_long>Use toolkit themed decorations. Supported clients include Gtk4 and Qt6</_long>
 		<category>Effects</category>
 		<option name="decorate_csd" type="bool">
 			<_short>Decorate windows that already have decorations</_short>
 			<_long>This can be used to toggle double decorations on windows that refuse to not decorate themselves. Grouping these windows will not be possible.</_long>
 			<default>true</default>
+		</option>
+		<option name="ignore_views" type="string">
+			<_short>Disable decorations for matched window types</_short>
+			<_long>Disables window decoration for windows matching the specified criteria.</_long>
+			<default>none</default>
 		</option>
 	</plugin>
 </wayfire>
