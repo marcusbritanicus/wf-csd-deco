@@ -140,7 +140,7 @@ DecorationWindow::DecorationWindow(uint32_t id, QWidget *parent) :
     setWindowFlags(
         Qt::Window | Qt::CustomizeWindowHint | Qt::FramelessWindowHint | Qt::BypassWindowManagerHint);
 
-    // setAttribute(Qt::WA_TranslucentBackground);
+    setAttribute(Qt::WA_TranslucentBackground);
 
     setMouseTracking(true);
 
