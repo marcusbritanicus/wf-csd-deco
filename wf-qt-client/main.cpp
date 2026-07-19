@@ -140,7 +140,7 @@ DecorationWindow::DecorationWindow(uint32_t id, QWidget *parent) :
     setWindowFlags(
         Qt::Window | Qt::CustomizeWindowHint | Qt::FramelessWindowHint | Qt::BypassWindowManagerHint);
 
-    setAttribute(Qt::WA_TranslucentBackground);
+    // setAttribute(Qt::WA_TranslucentBackground);
 
     setMouseTracking(true);
 
@@ -183,7 +183,7 @@ void DecorationWindow::setupUI()
     iconLbl->setPixmap(QIcon::fromTheme("wayfire").pixmap(24));
 
     titleLbl = new QLabel(this);
-    titleLbl->setText("__wf_qt_decorator");
+    // titleLbl->setText("__wf_qt_decorator");
 
     minBtn = new QToolButton();
     minBtn->setFixedSize(QSize(24, 24));
@@ -243,24 +243,24 @@ void DecorationWindow::setupUI()
 
 void DecorationWindow::setClientSize(const QSize & clientSize)
 {
-    if (clientSize.isEmpty())
-    {
-        return;
-    }
-
-    isResizingFromCompositor = true;
-    pendingClientSize = clientSize;
-
-    // Calculate total window size (client + decoration)
-    QSize totalSize = clientSize;
-    totalSize.setHeight(clientSize.height() + titleBarHeight + borderSize * 2);
-    totalSize.setWidth(clientSize.width() + borderSize * 2);
-
-    // Resize the window
-    qCritical() << "Calling resize" << totalSize;
-    resize(totalSize);
-
-    isResizingFromCompositor = false;
+    // if (clientSize.isEmpty())
+    // {
+    // return;
+    // }
+    //
+    // isResizingFromCompositor = true;
+    // pendingClientSize = clientSize;
+    //
+    //// Calculate total window size (client + decoration)
+    // QSize totalSize = clientSize;
+    // totalSize.setHeight(clientSize.height() + titleBarHeight + borderSize * 2);
+    // totalSize.setWidth(clientSize.width() + borderSize * 2);
+    //
+    //// Resize the window
+    // qCritical() << "Calling resize" << totalSize;
+    // resize(totalSize);
+    //
+    // isResizingFromCompositor = false;
 }
 
 void DecorationWindow::addTabButton(window_data *wdata, window_data *cdata)
@@ -569,41 +569,16 @@ void DecorationWindow::resizeEvent(QResizeEvent *event)
     QWidget::resizeEvent(event);
 
     // Update borders
-    update_borders(wf_id, titleBarHeight, borderSize, borderSize, borderSize);
+    update_borders(wf_id, titleBarHeight, borderSize - 3, borderSize, borderSize);
 
     qCritical() << event->size();
 }
 
-bool DecorationWindow::eventFilter(QObject *obj, QEvent *event)
+void DecorationWindow::mousePressEvent(QMouseEvent *event)
 {
-    if ((obj == this) && (event->type() == QEvent::Resize))
-    {
-        QResizeEvent *resizeEvent = static_cast<QResizeEvent*>(event);
-
-        qCritical() << "resize event" << resizeEvent->size();
-
-        // Only send update_borders if this resize came from the compositor
-        // or if we're not in the middle of a compositor-triggered resize
-        if (!isResizingFromCompositor)
-        {
-            // This resize came from the user or window manager
-            // Calculate client area size (total - decoration)
-            int clientHeight = resizeEvent->size().height() - titleBarHeight;
-            if (clientHeight < 0)
-            {
-                clientHeight = 0;
-            }
-
-            // Send the client area size to the compositor
-            // Note: This would be a custom protocol message if needed
-            update_borders(wf_id, titleBarHeight + borderSize, borderSize, borderSize, borderSize);
-
-            qDebug() << "Window resized by user. Client area:" <<
-                resizeEvent->size().width() << "x" << clientHeight;
-        }
-    }
-
-    return QWidget::eventFilter(obj, event);
+    qCritical() << "mouseEvent(...)";
+    QWidget::mousePressEvent(event);
+    window()->windowHandle()->startSystemMove();
 }
 
 void DecorationWindow::paintEvent(QPaintEvent *event)

@@ -13,22 +13,26 @@ static uint32_t decorator_global_id;
 extern QMap<uint32_t, QWidget*> view_to_decor;
 extern QMap<QWidget*, QSharedPointer<window_data>> win_data;
 
-static void create_new_decoration(void*, wf_decorator_manager*, uint32_t view_id) {
+static void create_new_decoration(void*, wf_decorator_manager*, uint32_t view_id)
+{
     qDebug() << "create new decoration";
     auto window = create_deco_window(view_id);
     view_to_decor[view_id] = window;
 }
 
-static void destroy_decoration(void*, wf_decorator_manager*, uint32_t view_id) {
+static void destroy_decoration(void*, wf_decorator_manager*, uint32_t view_id)
+{
     qDebug() << "destroy decoration";
     destroy_deco_window(view_id);
 }
 
-static void title_changed(void*, wf_decorator_manager*, uint32_t view, const char *new_title) {
+static void title_changed(void*, wf_decorator_manager*, uint32_t view, const char *new_title)
+{
     set_title(view_to_decor[view], new_title);
 }
 
-static void app_id_changed(void*, wf_decorator_manager*, uint32_t view, const char *new_app_id) {
+static void app_id_changed(void*, wf_decorator_manager*, uint32_t view, const char *new_app_id)
+{
     set_app_id(view_to_decor[view], new_app_id);
 }
 
@@ -40,10 +44,12 @@ const wf_decorator_manager_listener decorator_listener = {
 };
 
 void registry_add_object(void*, struct wl_registry *registry, uint32_t id,
-    const char *interface, uint32_t) {
+    const char *interface, uint32_t)
+{
     qDebug() << "new registry:" << interface;
     if ((strcmp(interface, wf_decorator_manager_interface.name) == 0) &&
-        (decorator_global_id != id)) {
+        (decorator_global_id != id))
+    {
         qDebug() << "bind it";
         decorator_manager = (wf_decorator_manager*)wl_registry_bind(registry, id,
             &wf_decorator_manager_interface, 1u);
@@ -52,8 +58,10 @@ void registry_add_object(void*, struct wl_registry *registry, uint32_t id,
     }
 }
 
-void registry_remove_object(void*, struct wl_registry*, uint32_t id) {
-    if (id == decorator_global_id) {
+void registry_remove_object(void*, struct wl_registry*, uint32_t id)
+{
+    if (id == decorator_global_id)
+    {
         wf_decorator_manager_destroy(decorator_manager);
         decorator_manager = NULL;
     }
@@ -64,64 +72,97 @@ static struct wl_registry_listener registry_listener = {
     &registry_remove_object
 };
 
-void close_request(uint32_t id) {
-    if (!decorator_manager) return;
+void close_request(uint32_t id)
+{
+    if (!decorator_manager)
+    {
+        return;
+    }
+
     wf_decorator_manager_close_request(decorator_manager, id);
 }
 
-void update_borders(uint32_t id, uint32_t top, uint32_t bottom, uint32_t left, uint32_t right) {
-    if (!decorator_manager) return;
+void update_borders(uint32_t id, uint32_t top, uint32_t bottom, uint32_t left, uint32_t right)
+{
+    if (!decorator_manager)
+    {
+        return;
+    }
+
     wf_decorator_manager_update_borders(decorator_manager, id, top, bottom, left, right);
 }
 
-void group_windows(uint32_t parent_id, uint32_t child_id) {
-    if (!decorator_manager) return;
+void group_windows(uint32_t parent_id, uint32_t child_id)
+{
+    if (!decorator_manager)
+    {
+        return;
+    }
+
     wf_decorator_manager_group_windows(decorator_manager, parent_id, child_id);
 }
 
-void select_window(uint32_t id) {
-    if (!decorator_manager) return;
+void select_window(uint32_t id)
+{
+    if (!decorator_manager)
+    {
+        return;
+    }
+
     wf_decorator_manager_select_window(decorator_manager, id);
 }
 
-void ungroup_window(uint32_t id) {
-    if (!decorator_manager) return;
+void ungroup_window(uint32_t id)
+{
+    if (!decorator_manager)
+    {
+        return;
+    }
+
     wf_decorator_manager_ungroup_window(decorator_manager, id);
 }
 
-void setup_protocol(void *display) {
+void setup_protocol(void *display)
+{
     // In Qt6, you would get the Wayland display differently
     // This is a placeholder - you'll need to adapt this for Qt's Wayland integration
     auto display_wl = (wl_display*)display;
-    auto registry = wl_display_get_registry(display_wl);
+    auto registry   = wl_display_get_registry(display_wl);
     wl_registry_add_listener(registry, &registry_listener, NULL);
     wl_display_roundtrip(display_wl);
 }
 
-DecorationWindow* create_deco_window(uint32_t wf_id) {
+DecorationWindow *create_deco_window(uint32_t wf_id)
+{
     DecorationWindow *window = new DecorationWindow(wf_id);
     window->setWindowTitle(QString("__wf_decorator:%1").arg(wf_id));
     window->show();
     return window;
 }
 
-void destroy_deco_window(uint32_t wf_id) {
+void destroy_deco_window(uint32_t wf_id)
+{
     auto window = view_to_decor[wf_id];
-    if (window) {
+    if (window)
+    {
         window->close();
         delete window;
         view_to_decor.remove(wf_id);
     }
 }
 
-void set_title(QWidget *window, const char *title) {
-    if (auto *dec = qobject_cast<DecorationWindow*>(window)) {
+void set_title(QWidget *window, const char *title)
+{
+    if (auto *dec = qobject_cast<DecorationWindow*>(window))
+    {
         dec->setWindowTitle(QString::fromUtf8(title));
     }
 }
 
-void set_app_id(QWidget *window, const char *app_id) {
-    if (auto *dec = qobject_cast<DecorationWindow*>(window)) {
+void set_app_id(QWidget *window, const char *app_id)
+{
+    if (auto *dec = qobject_cast<DecorationWindow*>(window))
+    {
         dec->setAppId(QString::fromUtf8(app_id));
     }
 }
