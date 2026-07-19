@@ -569,7 +569,7 @@ void DecorationWindow::resizeEvent(QResizeEvent *event)
     QWidget::resizeEvent(event);
 
     // Update borders
-    update_borders(wf_id, titleBarHeight, borderSize - 3, borderSize, borderSize);
+    update_borders(wf_id, titleBarHeight, borderSize, borderSize, borderSize);
 
     qCritical() << event->size();
 }

@@ -903,7 +903,7 @@ class gtk4_decoration_object_t : public wf::txn::transaction_object_t
             .x     = bbox.x + margin_left,
             .y     = bbox.y + margin_top,
             .width = bbox.width - margin_left * 2,
-            .height = bbox.height - margin_top - margin_bottom - 3,
+            .height = bbox.height - margin_top - margin_bottom,
         };
         masked->allowed ^= cut_out;
     }
