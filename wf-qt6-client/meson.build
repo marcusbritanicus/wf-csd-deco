@@ -6,14 +6,13 @@ QtDeps = dependency(
 	private_headers: true,
 )
 
-CoreMocs = Qt.compile_moc(
+Mocs = Qt.compile_moc(
 	headers : [ 'decorator.hpp' ],
-	sources : [ 'main.cpp' ],
  	dependencies: QtDeps,
 )
 
 qt6deco = executable( 'wf-qt6-decorator',
-    ['main.cpp', 'protocol.cpp', CoreMocs],
+    ['main.cpp', 'protocol.cpp', Mocs],
     install: true,
     dependencies: [QtDeps, wayland_client, wf_client_protos]
 )

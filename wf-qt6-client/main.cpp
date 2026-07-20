@@ -31,7 +31,6 @@
 // Global data
 static QApplication *app;
 QMap<uint32_t, QWidget*> view_to_decor;
-QMap<QWidget*, QSharedPointer<WindowData>> winData;
 
 // ===== DecorationButton Implementation =====
 DecorationButton::DecorationButton(Type btnType, QWidget *parent) :
@@ -229,21 +228,7 @@ void TabDropTarget::addWindow(uint32_t wf_id, const QString & appId, const QStri
             return;
         }
 
-        // Get the WindowData for the window being ungrouped
-        QWidget *decor = view_to_decor.value(wf_id, nullptr);
-        if (!decor)
-        {
-            return;
-        }
-
-        WindowData *data = winData[decor].data();
-        if (!data)
-        {
-            return;
-        }
-
-        // Full ungroup (updates group state and notifies compositor)
-        parentWin->ungroup(data, true);
+        parentWin->ungroup(wf_id, true);
     });
 
     menu()->addAction(action);
@@ -333,16 +318,8 @@ void TabDropTarget::dropEvent(QDropEvent *event)
             DecorationWindow *targetWindow = qobject_cast<DecorationWindow*>(parent());
             if (targetWindow)
             {
-                QWidget *droppedWidget = view_to_decor[dropped_wf_id];
-                if (droppedWidget)
-                {
-                    WindowData *droppedData = winData[droppedWidget].data();
-                    if (droppedData)
-                    {
-                        targetWindow->group(targetWindow->getWindowData(), dropped_wf_id);
-                        event->acceptProposedAction();
-                    }
-                }
+                targetWindow->group(targetWindow->getWfId(), dropped_wf_id);
+                event->acceptProposedAction();
             }
         }
     }
@@ -359,15 +336,8 @@ DecorationWindow::DecorationWindow(uint32_t id, QWidget *parent) :
     setMouseTracking(true);
     resize(300, 300);
 
-    wdata = new WindowData();
-    wdata->wf_id    = id;
-    wdata->group.id = 0;
-    wdata->group.parent = false;
-    wdata->group.order.clear();
-
     setupUI();
 
-    winData[this]     = QSharedPointer<WindowData>(wdata);
     view_to_decor[id] = this;
 }
 
@@ -439,19 +409,28 @@ void DecorationWindow::setupUI()
 
 // ===== Group Management - Like GTK version =====
 
-void DecorationWindow::addTabForWindow(WindowData *wdata, WindowData *cdata)
+void DecorationWindow::addTabForWindow(uint32_t cdata_wf_id)
 {
     // In Qt version, we add to the TabDropTarget menu instead of a tab box
     // This is called by refreshGroup to populate the menu
-    if (this->groupBtn && cdata)
+    if (this->groupBtn)
     {
-        qCritical() << cdata->app_id;
-        qCritical() << cdata->title;
-        qCritical() << "-------------";
+        QWidget *decor = view_to_decor[cdata_wf_id];
+        if (!decor)
+        {
+            return;
+        }
+
+        DecorationWindow *win = qobject_cast<DecorationWindow*>(decor);
+        if (!win)
+        {
+            return;
+        }
+
         this->groupBtn->addWindow(
-            cdata->wf_id,
-            QString::fromStdString(cdata->app_id),
-            QString::fromStdString(cdata->title));
+            cdata_wf_id,
+            win->appId,
+            win->windowTitle());
     }
 }
 
@@ -463,11 +442,11 @@ void DecorationWindow::clearGroupTabs(uint32_t group_id)
     }
 
     // Clear all TabDropTarget menus for windows in this group
-    for (auto it = winData.begin(); it != winData.end(); ++it)
+    for (auto it = view_to_decor.begin(); it != view_to_decor.end(); ++it)
     {
-        if (it.value()->group.id == group_id)
+        if (auto *dec = qobject_cast<DecorationWindow*>(it.value()))
         {
-            if (auto *dec = qobject_cast<DecorationWindow*>(view_to_decor[it.value()->wf_id]))
+            if (dec->groupId == group_id)
             {
                 if (dec->groupBtn)
                 {
@@ -487,108 +466,170 @@ void DecorationWindow::refreshGroup(uint32_t group_id)
 
     // Get the order from the parent
     QList<uint32_t> button_order;
-    for (auto it = winData.begin(); it != winData.end(); ++it)
+    bool hasParent = false;
+
+    for (auto it = view_to_decor.begin(); it != view_to_decor.end(); ++it)
     {
-        if ((it.value()->group.id == group_id) && it.value()->group.parent)
+        if (auto *dec = qobject_cast<DecorationWindow*>(it.value()))
         {
-            button_order = it.value()->group.order;
-            break;
+            if ((dec->groupId == group_id) && dec->isGroupParent)
+            {
+                button_order = dec->groupOrder;
+                hasParent    = true;
+                break;
+            }
         }
+    }
+
+    // If there's no parent or the order is empty, the group is effectively empty
+    if (!hasParent || button_order.isEmpty())
+    {
+        // Reset all windows that still think they're in this group
+        for (auto it = view_to_decor.begin(); it != view_to_decor.end(); ++it)
+        {
+            if (auto *dec = qobject_cast<DecorationWindow*>(it.value()))
+            {
+                if (dec->groupId == group_id)
+                {
+                    dec->groupId = 0;
+                    dec->isGroupParent = false;
+                    dec->groupOrder.clear();
+
+                    // Reset their menu to show only themselves
+                    if (dec->groupBtn)
+                    {
+                        dec->groupBtn->clearAll();
+                        dec->groupBtn->addWindow(
+                            dec->wf_id,
+                            dec->appId,
+                            dec->windowTitle());
+                    }
+                }
+            }
+        }
+
+        return;
     }
 
     // Clear all tabs in the group first
     clearGroupTabs(group_id);
 
     // For each window in the group, add all tabs
-    for (auto it = winData.begin(); it != winData.end(); ++it)
+    for (auto it = view_to_decor.begin(); it != view_to_decor.end(); ++it)
     {
-        if (it.value()->group.id == group_id)
+        if (auto *dec = qobject_cast<DecorationWindow*>(it.value()))
         {
-            if (auto *dec = qobject_cast<DecorationWindow*>(view_to_decor[it.value()->wf_id]))
+            if (dec->groupId == group_id)
             {
                 // Add each window in order to this window's menu
                 for (auto id : button_order)
                 {
-                    auto cdata = winData[view_to_decor[id]].data();
-                    if (cdata && (cdata->group.id == group_id))
-                    {
-                        dec->addTabForWindow(it.value().data(), cdata);
-                    }
+                    dec->addTabForWindow(id);
                 }
             }
         }
     }
 
-    // If only one window in group, clear and reset to single tab
-    for (auto it = winData.begin(); it != winData.end(); ++it)
+    // If only one window in group, convert it to a standalone window
+    if (button_order.size() == 1)
     {
-        if (it.value()->group.id == group_id)
+        uint32_t solo_id = button_order.first();
+        auto *dec = qobject_cast<DecorationWindow*>(view_to_decor[solo_id]);
+        if (dec)
         {
-            if (auto *dec = qobject_cast<DecorationWindow*>(view_to_decor[it.value()->wf_id]))
+            dec->groupId = 0;
+            dec->isGroupParent = false;
+            dec->groupOrder.clear();
+
+            if (dec->groupBtn)
             {
-                if (dec->groupBtn && (dec->groupBtn->menu()->actions().size() <= 1))
+                dec->groupBtn->clearAll();
+                dec->groupBtn->addWindow(
+                    solo_id,
+                    dec->appId,
+                    dec->windowTitle());
+            }
+        }
+
+        // Remove the now-empty group from all other windows
+        for (auto it = view_to_decor.begin(); it != view_to_decor.end(); ++it)
+        {
+            if (auto *other = qobject_cast<DecorationWindow*>(it.value()))
+            {
+                if ((other->groupId == group_id) && (other->wf_id != solo_id))
                 {
-                    dec->groupBtn->clearAll();
-                    it.value()->group.id = 0;
-                    it.value()->group.parent = false;
-                    it.value()->group.order.clear();
-                    dec->addTabForWindow(it.value().data(), it.value().data());
+                    other->groupId = 0;
+                    other->isGroupParent = false;
+                    other->groupOrder.clear();
                 }
             }
         }
     }
 }
 
-void DecorationWindow::group(WindowData *drop_target_data, uint32_t wf_id)
+void DecorationWindow::group(uint32_t drop_target_id, uint32_t wf_id)
 {
-    auto drag_source_data = winData[view_to_decor[wf_id]].data();
-    uint32_t group_id     = 1;
+    auto *drop_target_win = qobject_cast<DecorationWindow*>(view_to_decor[drop_target_id]);
+    auto *drag_source_win = qobject_cast<DecorationWindow*>(view_to_decor[wf_id]);
 
-    if (drag_source_data->group.id && (drag_source_data->group.id == drop_target_data->group.id))
+    if (!drop_target_win || !drag_source_win)
+    {
+        return;
+    }
+
+    uint32_t group_id = 1;
+
+    if (drag_source_win->groupId && (drag_source_win->groupId == drop_target_win->groupId))
     {
         qDebug() << "Cannot add tab to the same group.";
         return;
     }
 
     // Ungroup the dragged window first
-    ungroup(drag_source_data, false);
+    ungroup(wf_id, false);
 
     // Tell the compositor about the grouping
-    group_windows(drop_target_data->wf_id, wf_id);
+    group_windows(drop_target_id, wf_id);
 
     // Find or create group ID
-    if (drop_target_data->group.id)
+    if (drop_target_win->groupId)
     {
-        group_id = drop_target_data->group.id;
+        group_id = drop_target_win->groupId;
     } else
     {
-        for (auto it = winData.begin(); it != winData.end(); ++it)
+        for (auto it = view_to_decor.begin(); it != view_to_decor.end(); ++it)
         {
-            if (it.value()->group.id >= group_id)
+            if (auto *dec = qobject_cast<DecorationWindow*>(it.value()))
             {
-                group_id = it.value()->group.id + 1;
+                if (dec->groupId >= group_id)
+                {
+                    group_id = dec->groupId + 1;
+                }
             }
         }
 
-        drop_target_data->group.parent = true;
-        drop_target_data->group.id     = group_id;
-        drop_target_data->group.order.append(drop_target_data->wf_id);
+        drop_target_win->isGroupParent = true;
+        drop_target_win->groupId = group_id;
+        drop_target_win->groupOrder.append(drop_target_win->wf_id);
     }
 
     // Set the dragged window's group
-    drag_source_data->group.id = group_id;
+    drag_source_win->groupId = group_id;
 
     // Add to parent's order
-    for (auto it = winData.begin(); it != winData.end(); ++it)
+    for (auto it = view_to_decor.begin(); it != view_to_decor.end(); ++it)
     {
-        if ((it.value()->group.id == group_id) && it.value()->group.parent)
+        if (auto *dec = qobject_cast<DecorationWindow*>(it.value()))
         {
-            if (!it.value()->group.order.contains(drag_source_data->wf_id))
+            if ((dec->groupId == group_id) && dec->isGroupParent)
             {
-                it.value()->group.order.append(drag_source_data->wf_id);
-            }
+                if (!dec->groupOrder.contains(drag_source_win->wf_id))
+                {
+                    dec->groupOrder.append(drag_source_win->wf_id);
+                }
 
-            break;
+                break;
+            }
         }
     }
 
@@ -596,66 +637,56 @@ void DecorationWindow::group(WindowData *drop_target_data, uint32_t wf_id)
     refreshGroup(group_id);
 }
 
-void DecorationWindow::ungroup(WindowData *wdata, bool notify_server)
+void DecorationWindow::ungroup(uint32_t wf_id, bool notify_server)
 {
-    auto group_id = wdata->group.id;
+    auto *win = qobject_cast<DecorationWindow*>(view_to_decor[wf_id]);
+    if (!win)
+    {
+        return;
+    }
+
+    auto group_id = win->groupId;
 
     if (group_id)
     {
         // Remove from parent's order
-        for (auto it = winData.begin(); it != winData.end(); ++it)
+        for (auto it = view_to_decor.begin(); it != view_to_decor.end(); ++it)
         {
-            if ((group_id == it.value()->group.id) && it.value()->group.parent)
+            if (auto *dec = qobject_cast<DecorationWindow*>(it.value()))
             {
-                it.value()->group.order.removeAll(wdata->wf_id);
-                break;
+                if ((group_id == dec->groupId) && dec->isGroupParent)
+                {
+                    dec->groupOrder.removeAll(wf_id);
+                    break;
+                }
             }
         }
     }
 
     // Reset this window's group data
-    wdata->group.parent = false;
-    wdata->group.order.clear();
-    wdata->group.id = 0;
+    win->isGroupParent = false;
+    win->groupOrder.clear();
+    win->groupId = 0;
+
+    // Reset this window's menu to show only itself
+    if (win->groupBtn)
+    {
+        win->groupBtn->clearAll();
+        win->groupBtn->addWindow(
+            wf_id,
+            win->appId,
+            win->windowTitle());
+    }
 
     // If there was a group, refresh it
     if (group_id)
     {
-        // Check if group still has members
-        bool hasMembers = false;
-        for (auto it = winData.begin(); it != winData.end(); ++it)
-        {
-            if (it.value()->group.id == group_id)
-            {
-                hasMembers = true;
-                break;
-            }
-        }
-
-        if (hasMembers)
-        {
-            // Refresh remaining group
-            refreshGroup(group_id);
-        } else
-        {
-            // Group is empty, clear all
-            clearGroupTabs(group_id);
-        }
-
-        // Reset this window's menu to show only itself
-        if (groupBtn)
-        {
-            groupBtn->clearAll();
-            groupBtn->addWindow(
-                wdata->wf_id,
-                QString::fromStdString(wdata->app_id),
-                QString::fromStdString(wdata->title));
-        }
+        refreshGroup(group_id);
     }
 
     if (notify_server)
     {
-        ungroup_window(wdata->wf_id);
+        ungroup_window(wf_id);
     }
 }
 
@@ -682,7 +713,7 @@ void DecorationWindow::dropEvent(QDropEvent *event)
         uint32_t id = event->mimeData()->data("application/x-wf-window-id").toUInt(&ok);
         if (ok && (id != wf_id))
         {
-            group(wdata, id);
+            group(wf_id, id);
             event->acceptProposedAction();
         }
     }
@@ -790,7 +821,6 @@ void DecorationWindow::paintEvent(QPaintEvent *event)
         painter.setPen(QPen(palette().color(QPalette::Highlight), defaultBorderSize));
     } else
     {
-        // painter.setPen(QPen(QColor(29, 29, 29), defaultBorderSize));
         painter.setPen(QPen(palette().color(QPalette::Highlight), defaultBorderSize));
     }
 
@@ -829,13 +859,12 @@ void DecorationWindow::paintEvent(QPaintEvent *event)
 void DecorationWindow::setWindowTitle(const QString & title)
 {
     QWidget::setWindowTitle(title);
-    wdata->title = title.toStdString();
     titleLbl->setText(title);
 }
 
 void DecorationWindow::setAppId(const QString & appId)
 {
-    wdata->app_id = appId.toStdString();
+    this->appId = appId;
 
     QPixmap pixmap;
     if (QIcon::hasThemeIcon(appId))
@@ -854,32 +883,11 @@ void DecorationWindow::setAppId(const QString & appId)
     // Add initial tab
     if (groupBtn)
     {
-        groupBtn->addWindow(wdata->wf_id, appId, QString::fromStdString(wdata->title));
+        groupBtn->addWindow(wf_id, appId, windowTitle());
     }
 }
 
-// ===== Main =====
-
-int main(int argc, char *argv[])
-{
-    QApplication a(argc, argv);
-    a.setDesktopFileName("org.wf.sample-decorator");
-    app = &a;
-
-    QPlatformNativeInterface *native = QGuiApplication::platformNativeInterface();
-
-    if (native)
-    {
-        struct wl_display *display =
-            reinterpret_cast<wl_display*>(native->nativeResourceForIntegration("display"));
-
-        setup_protocol(display);
-        return a.exec();
-    } else
-    {
-        qFatal() << "Unable to get wayland display!";
-    }
-}
+// ===== GroupEntry =====
 
 GroupEntry::GroupEntry(uint32_t wf_id, const QString & appId, const QString & title,
     QWidget *parent) : QWidget(parent)
@@ -903,10 +911,10 @@ GroupEntry::GroupEntry(uint32_t wf_id, const QString & appId, const QString & ti
         iconLbl->setPixmap(pixmap);
     }
 
-    titleLbl = new QLabel(title, this); \
+    titleLbl = new QLabel(title, this);
     titleLbl->setFixedHeight(24);
 
-    ungroupBtn = new QToolButton(this); \
+    ungroupBtn = new QToolButton(this);
     ungroupBtn->setFixedSize(QSize(24, 24));
     ungroupBtn->setIcon(QIcon::fromTheme("arrow-up-double"));
     ungroupBtn->setToolTip("Ungroup");
@@ -918,4 +926,27 @@ GroupEntry::GroupEntry(uint32_t wf_id, const QString & appId, const QString & ti
     lyt->addWidget(ungroupBtn);
 
     setLayout(lyt);
+}
+
+// ===== Main =====
+
+int main(int argc, char *argv[])
+{
+    QApplication a(argc, argv);
+    a.setDesktopFileName("org.wf.sample-decorator");
+    app = &a;
+
+    QPlatformNativeInterface *native = QGuiApplication::platformNativeInterface();
+
+    if (native)
+    {
+        struct wl_display *display =
+            reinterpret_cast<wl_display*>(native->nativeResourceForIntegration("display"));
+
+        setup_protocol(display);
+        return a.exec();
+    } else
+    {
+        qFatal() << "Unable to get wayland display!";
+    }
 }

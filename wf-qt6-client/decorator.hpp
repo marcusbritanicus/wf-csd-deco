@@ -23,7 +23,6 @@
 #include <QWindow>
 #include <QScreen>
 #include <QMap>
-#include <QSharedPointer>
 #include <QDebug>
 #include <QAbstractAnimation>
 #include <QPropertyAnimation>
@@ -48,17 +47,12 @@ class DecorationWindow : public QWidget
         return wf_id;
     }
 
-    WindowData *getWindowData() const
-    {
-        return wdata;
-    }
-
     // Group management - like GTK version
-    void addTabForWindow(WindowData *wdata, WindowData *cdata);
+    void addTabForWindow(uint32_t cdata_wf_id);
     void refreshGroup(uint32_t group_id);
     void clearGroupTabs(uint32_t group_id);
-    void group(WindowData *drop_target_data, uint32_t wf_id);
-    void ungroup(WindowData *wdata, bool notify_server);
+    void group(uint32_t drop_target_id, uint32_t wf_id);
+    void ungroup(uint32_t wf_id, bool notify_server);
 
   protected:
     void dragEnterEvent(QDragEnterEvent *event) override;
@@ -74,7 +68,7 @@ class DecorationWindow : public QWidget
     bool isOverButtons();
 
     uint32_t wf_id;
-    WindowData *wdata;
+    QString appId;
     bool isGroupParent;
     uint32_t groupId;
     QList<uint32_t> groupOrder;
