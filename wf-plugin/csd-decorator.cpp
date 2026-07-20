@@ -904,7 +904,7 @@ class csd_decoration_object_t : public wf::txn::transaction_object_t
             .x     = bbox.x + margin_left,
             .y     = bbox.y + margin_top,
             .width = bbox.width - margin_left * 2,
-            .height = bbox.height - margin_top - margin_left,
+            .height = bbox.height - margin_top - margin_left - margin_bottom + 1,
         };
         masked->allowed ^= cut_out;
     }
@@ -961,7 +961,7 @@ void do_update_borders(wl_client*, struct wl_resource*, uint32_t id, uint32_t to
     LOGI(use_csd);
 
     deco_margins.top    = top - left - 1;
-    deco_margins.bottom = bottom;
+    deco_margins.bottom = right + 1;
     deco_margins.left   = right;
     deco_margins.right  = right;
     data->decoration->set_margins(top, bottom, left, right, data->margin_offset);
