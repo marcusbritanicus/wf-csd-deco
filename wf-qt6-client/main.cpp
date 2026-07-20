@@ -23,6 +23,7 @@
 #include <QSharedPointer>
 #include <QDebug>
 #include <QPainter>
+#include <QPainterPath>
 #include <QMenu>
 
 #include <qpa/qplatformnativeinterface.h>
@@ -136,8 +137,8 @@ void DecorationButton::animateOpacity(qreal targetOpacity)
 }
 
 // ===== TabDragSource Implementation =====
-TabDragSource::TabDragSource(WindowData *data, QWidget *parent) :
-    QLabel(parent), wdata(data)
+TabDragSource::TabDragSource(uint32_t id, QWidget *parent) :
+    QLabel(parent), wfId(id)
 {
     setFixedSize(24, 24);
     setScaledContents(true);
@@ -168,7 +169,7 @@ void TabDragSource::mouseMoveEvent(QMouseEvent *event)
 
     QDrag *drag = new QDrag(this);
     QMimeData *mimeData = new QMimeData;
-    mimeData->setData("application/x-wf-window-id", QByteArray::number(wdata->wf_id));
+    mimeData->setData("application/x-wf-window-id", QByteArray::number(wfId));
     drag->setMimeData(mimeData);
     drag->setPixmap(pixmap(Qt::ReturnByValue).scaled(32, 32));
     drag->setHotSpot(QPoint(16, 16));
@@ -179,7 +180,7 @@ void TabDragSource::mouseReleaseEvent(QMouseEvent *event)
 {
     if (event->button() == Qt::LeftButton)
     {
-        select_window(wdata->wf_id);
+        select_window(wfId);
     }
 
     QLabel::mouseReleaseEvent(event);
@@ -208,12 +209,44 @@ TabDropTarget::TabDropTarget(QWidget *parent) :
 
 void TabDropTarget::addWindow(uint32_t wf_id, const QString & appId, const QString & title)
 {
-    QAction *action = menu()->addAction(QIcon::fromTheme(appId), title);
+    QWidgetAction *action = new QWidgetAction(menu());
+    GroupEntry *entry     = new GroupEntry(wf_id, appId, title, menu());
+    action->setDefaultWidget(entry);
     action->setData(wf_id);
+
+    // Click on the menu item → select the window
     connect(action, &QAction::triggered, this, [wf_id] ()
     {
         select_window(wf_id);
     });
+
+    // Ungroup button clicked → perform full ungroup
+    connect(entry, &GroupEntry::ungroup, this, [this, wf_id] ()
+    {
+        DecorationWindow *parentWin = qobject_cast<DecorationWindow*>(parent());
+        if (!parentWin)
+        {
+            return;
+        }
+
+        // Get the WindowData for the window being ungrouped
+        QWidget *decor = view_to_decor.value(wf_id, nullptr);
+        if (!decor)
+        {
+            return;
+        }
+
+        WindowData *data = winData[decor].data();
+        if (!data)
+        {
+            return;
+        }
+
+        // Full ungroup (updates group state and notifies compositor)
+        parentWin->ungroup(data, true);
+    });
+
+    menu()->addAction(action);
     updateButtonState();
 }
 
@@ -349,7 +382,7 @@ void DecorationWindow::setupUI()
     baseLyt->setContentsMargins(QMargins(defaultBorderSize, 0, defaultBorderSize, defaultBorderSize));
     baseLyt->setSpacing(0);
 
-    iconLbl = new TabDragSource(wdata, this);
+    iconLbl = new TabDragSource(wf_id, this);
     iconLbl->setFixedSize(QSize(24, 24));
     iconLbl->setPixmap(QIcon::fromTheme("wayfire").pixmap(24));
 
@@ -665,8 +698,9 @@ void DecorationWindow::resizeEvent(QResizeEvent *event)
 {
     QWidget::resizeEvent(event);
 
-    QPoint pos = clientArea->mapTo(window(), QPoint(0, 0));
-    update_borders(wf_id, pos.y(), defaultBorderSize, defaultBorderSize, defaultBorderSize);
+    QPoint relative_position = clientArea->mapTo(window(), QPoint(0, 0));
+    update_borders(wf_id, relative_position.y(), relative_position.x() * 2 + 1,
+        relative_position.x(), relative_position.x());
 }
 
 Qt::Edges DecorationWindow::getEdgesAt(const QPoint & pos)
@@ -748,31 +782,47 @@ void DecorationWindow::paintEvent(QPaintEvent *event)
     QPainter painter(this);
     painter.setRenderHints(QPainter::Antialiasing);
 
+    qreal radius = 5.0;
+    qreal offset = defaultBorderSize / 2.0;
+
     if (hasFocus() || isActiveWindow())
     {
-        painter.setPen(QPen(palette().color(QPalette::Highlight), 2.0));
+        painter.setPen(QPen(palette().color(QPalette::Highlight), defaultBorderSize));
     } else
     {
-        painter.setPen(QPen(Qt::black, 2.0));
+        // painter.setPen(QPen(QColor(29, 29, 29), defaultBorderSize));
+        painter.setPen(QPen(palette().color(QPalette::Highlight), defaultBorderSize));
     }
 
     if (minBtn->isUnderMouse)
     {
-        painter.setPen(QPen(Qt::darkYellow, 2.0));
+        painter.setPen(QPen(Qt::darkYellow, defaultBorderSize));
     }
 
     if (maxBtn->isUnderMouse)
     {
-        painter.setPen(QPen(Qt::darkBlue, 2.0));
+        painter.setPen(QPen(Qt::darkCyan, defaultBorderSize));
     }
 
     if (closeBtn->isUnderMouse)
     {
-        painter.setPen(QPen(Qt::darkRed, 2.0));
+        painter.setPen(QPen(Qt::darkRed, defaultBorderSize));
     }
 
-    painter.setBrush(QColor(0, 0, 0, 120));
-    painter.drawRoundedRect(QRect(0, 0, width(), height()).adjusted(1.0, 1.0, -1.0, -1.0), 5.0, 5.0);
+    painter.setBrush(QColor(29, 29, 29));
+
+    QPainterPath path;
+    path.setFillRule(Qt::WindingFill);
+
+    QRectF topRect    = QRectF(0, 0, width(), radius * 2).adjusted(offset, offset, -offset, -offset);
+    QRectF bottomRect = QRectF(0, radius, width(), height() - radius).adjusted(offset, offset, -offset,
+        -offset);
+
+    path.addRoundedRect(topRect, radius, radius);
+    path.addRect(bottomRect);
+
+    painter.drawPath(path.simplified());
+
     painter.end();
 }
 
@@ -799,7 +849,6 @@ void DecorationWindow::setAppId(const QString & appId)
     if (iconLbl)
     {
         iconLbl->setPixmap(pixmap);
-        iconLbl->setWindowData(wdata);
     }
 
     // Add initial tab
@@ -832,4 +881,41 @@ int main(int argc, char *argv[])
     }
 }
 
-#include "main.moc"
+GroupEntry::GroupEntry(uint32_t wf_id, const QString & appId, const QString & title,
+    QWidget *parent) : QWidget(parent)
+{
+    QHBoxLayout *lyt = new QHBoxLayout();
+
+    iconLbl = new TabDragSource(wf_id, this);
+    iconLbl->setFixedSize(QSize(24, 24));
+
+    QPixmap pixmap;
+    if (QIcon::hasThemeIcon(appId))
+    {
+        pixmap = QIcon::fromTheme(appId).pixmap(24);
+    } else
+    {
+        pixmap = QIcon::fromTheme("wayfire").pixmap(24);
+    }
+
+    if (iconLbl)
+    {
+        iconLbl->setPixmap(pixmap);
+    }
+
+    titleLbl = new QLabel(title, this); \
+    titleLbl->setFixedHeight(24);
+
+    ungroupBtn = new QToolButton(this); \
+    ungroupBtn->setFixedSize(QSize(24, 24));
+    ungroupBtn->setIcon(QIcon::fromTheme("arrow-up-double"));
+    ungroupBtn->setToolTip("Ungroup");
+    ungroupBtn->setAutoRaise(true);
+    connect(ungroupBtn, &QToolButton::clicked, this, &GroupEntry::ungroup);
+
+    lyt->addWidget(iconLbl);
+    lyt->addWidget(titleLbl);
+    lyt->addWidget(ungroupBtn);
+
+    setLayout(lyt);
+}

@@ -27,50 +27,11 @@
 #include <QDebug>
 #include <QAbstractAnimation>
 #include <QPropertyAnimation>
+#include <QWidgetAction>
 
+class DecorationButton;
 class TabDragSource;
 class TabDropTarget;
-
-class DecorationButton : public QWidget
-{
-    Q_OBJECT
-    Q_PROPERTY(qreal opacity READ opacity WRITE setOpacity)
-
-  public:
-    enum class Type
-    {
-        Minimize,
-        Maximize,
-        Pin,
-        Close,
-    };
-
-    DecorationButton(Type btnType, QWidget *parent = nullptr);
-    qreal opacity() const
-    {
-        return mOpacity;
-    }
-
-    void setOpacity(qreal opacity);
-    bool isUnderMouse = false;
-
-  signals:
-    void clicked();
-
-  protected:
-    void enterEvent(QEnterEvent *event) override;
-    void leaveEvent(QEvent *event) override;
-    void mousePressEvent(QMouseEvent *event) override;
-    void mouseReleaseEvent(QMouseEvent *event) override;
-    void paintEvent(QPaintEvent *event) override;
-
-  private:
-    void animateOpacity(qreal targetOpacity);
-    Type buttonType;
-    qreal mOpacity;
-    bool isPressed = false;
-    QPropertyAnimation *opacityAnimation;
-};
 
 class DecorationWindow : public QWidget
 {
@@ -131,7 +92,48 @@ class DecorationWindow : public QWidget
 
     Qt::Edges getEdgesAt(const QPoint & pos);
     void updateCursorShape(const QPoint & pos);
-    int defaultBorderSize = 2;
+    int defaultBorderSize = 1;
+};
+
+class DecorationButton : public QWidget
+{
+    Q_OBJECT
+    Q_PROPERTY(qreal opacity READ opacity WRITE setOpacity)
+
+  public:
+    enum class Type
+    {
+        Minimize,
+        Maximize,
+        Pin,
+        Close,
+    };
+
+    DecorationButton(Type btnType, QWidget *parent = nullptr);
+    qreal opacity() const
+    {
+        return mOpacity;
+    }
+
+    void setOpacity(qreal opacity);
+    bool isUnderMouse = false;
+
+  signals:
+    void clicked();
+
+  protected:
+    void enterEvent(QEnterEvent *event) override;
+    void leaveEvent(QEvent *event) override;
+    void mousePressEvent(QMouseEvent *event) override;
+    void mouseReleaseEvent(QMouseEvent *event) override;
+    void paintEvent(QPaintEvent *event) override;
+
+  private:
+    void animateOpacity(qreal targetOpacity);
+    Type buttonType;
+    qreal mOpacity;
+    bool isPressed = false;
+    QPropertyAnimation *opacityAnimation;
 };
 
 class TabDragSource : public QLabel
@@ -139,16 +141,7 @@ class TabDragSource : public QLabel
     Q_OBJECT
 
   public:
-    TabDragSource(WindowData *data, QWidget *parent = nullptr);
-    void setWindowData(WindowData *data)
-    {
-        wdata = data;
-    }
-
-    WindowData *getWindowData() const
-    {
-        return wdata;
-    }
+    TabDragSource(uint32_t id, QWidget *parent = nullptr);
 
   protected:
     void mousePressEvent(QMouseEvent *event) override;
@@ -156,7 +149,7 @@ class TabDragSource : public QLabel
     void mouseReleaseEvent(QMouseEvent *event) override;
 
   private:
-    WindowData *wdata;
+    uint32_t wfId = 0;
     QPoint dragStartPos;
 };
 
@@ -179,4 +172,26 @@ class TabDropTarget : public QPushButton
 
   private:
     void updateButtonState();
+};
+
+class GroupEntry : public QWidget
+{
+    Q_OBJECT
+
+  public:
+    GroupEntry(uint32_t wf_id, const QString & appId, const QString & title, QWidget *parent);
+
+    void setTitle(QString& title);
+    void setAppId(QString& appId);
+
+    Q_SIGNAL void ungroup();
+
+  private:
+    QPointer<TabDragSource> iconLbl;
+    QPointer<QLabel> titleLbl;
+    QPointer<QToolButton> ungroupBtn;
+
+  protected:
+    // void mousePressEvent(QMouseEvent *event) override;
+    // void mouseReleaseEvent(QMouseEvent *event) override;
 };

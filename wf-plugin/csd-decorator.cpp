@@ -535,8 +535,8 @@ class csd_decoration_object_t : public wf::txn::transaction_object_t
         on_map_popup.set_callback([=] (void*)
         {
             auto popup = current_popup;
-
-            popup->base->current.geometry.y += margin_top - margin_bottom;
+            popup->base->pending.geometry.y += margin_top - margin_bottom - 5;
+            popup->base->current.geometry.y  = popup->base->pending.geometry.y;
             on_map_popup.disconnect();
         });
 
@@ -904,7 +904,7 @@ class csd_decoration_object_t : public wf::txn::transaction_object_t
             .x     = bbox.x + margin_left,
             .y     = bbox.y + margin_top,
             .width = bbox.width - margin_left * 2,
-            .height = bbox.height - margin_top - margin_bottom,
+            .height = bbox.height - margin_top - margin_left,
         };
         masked->allowed ^= cut_out;
     }
@@ -948,8 +948,8 @@ void do_update_borders(wl_client*, struct wl_resource*, uint32_t id, uint32_t to
         return;
     }
 
-    auto data = wf::toplevel_cast(target)->toplevel()->get_data_safe<csd_toplevel_custom_data>();
-    if (!data->decoration)
+    auto data = wf::toplevel_cast(target)->toplevel()->get_data<csd_toplevel_custom_data>();
+    if (!data || !data->decoration)
     {
         return;
     }
@@ -960,8 +960,8 @@ void do_update_borders(wl_client*, struct wl_resource*, uint32_t id, uint32_t to
     bool use_csd = data->decoration->use_csd;
     LOGI(use_csd);
 
-    deco_margins.top    = top - left + 2;
-    deco_margins.bottom = right;
+    deco_margins.top    = top - left - 1;
+    deco_margins.bottom = bottom;
     deco_margins.left   = right;
     deco_margins.right  = right;
     data->decoration->set_margins(top, bottom, left, right, data->margin_offset);
