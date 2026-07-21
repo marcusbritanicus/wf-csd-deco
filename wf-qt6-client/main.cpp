@@ -112,10 +112,12 @@ void DecorationWindow::setupUI()
     baseLyt->setSpacing(0);
 
     iconLbl = new TabDragSource(wf_id, this);
+    iconLbl->setCursor(Qt::ArrowCursor);
     iconLbl->setFixedSize(QSize(settings->uiSize, settings->uiSize));
     iconLbl->setPixmap(QIcon::fromTheme("wayfire").pixmap(settings->uiSize));
 
     titleLbl = new QLabel(this);
+    titleLbl->setCursor(Qt::ArrowCursor);
     titleLbl->setStyleSheet(QString("QLabel { color: %1; }").arg(settings->textColor.name()));
     titleLbl->setFont(settings->titleFont);
 
@@ -814,6 +816,7 @@ void TabDropTarget::addWindow(uint32_t wf_id, const QString & appId, const QStri
     GroupEntry *entry     = new GroupEntry(wf_id, appId, title, menu());
     action->setDefaultWidget(entry);
     action->setData(wf_id);
+    action->setText(title);
 
     // Click on the menu item → select the window
     connect(action, &QAction::triggered, this, [wf_id] ()
@@ -867,10 +870,35 @@ void TabDropTarget::updateButtonState()
         setToolTip("Drop here to group windows");
     } else
     {
-        QAction *first = menu()->actions().first();
-        setIcon(first->icon());
-        setText(first->text());
-        setToolTip(QString("Group of %1 windows").arg(menu()->actions().size()));
+        DecorationWindow *parentWin = qobject_cast<DecorationWindow*>(parent());
+        uint32_t activeWfId = parentWin ? parentWin->getWfId() : 0;
+
+        QAction *displayAction = nullptr;
+
+        // Try to find the action for the parent window (current client)
+        if (activeWfId != 0)
+        {
+            for (QAction *action : menu()->actions())
+            {
+                if (action->data().toUInt() == activeWfId)
+                {
+                    displayAction = action;
+                    break;
+                }
+            }
+        }
+
+        // Fallback to first action if parent window not found in menu
+        if (!displayAction)
+        {
+            displayAction = menu()->actions().first();
+        }
+
+        setIcon(displayAction->icon());
+        setText(displayAction->text());
+        setToolTip(QString("Group of %1 windows - Current: %2")
+            .arg(menu()->actions().size())
+            .arg(displayAction->text()));
     }
 }
 
@@ -1026,7 +1054,6 @@ void Settings::loadSettings()
         if (uiSizeVar.isValid() && uiSizeVar.canConvert<int>())
         {
             uiSize = uiSizeVar.toInt();
-            qCritical() << "-------->" << uiSize << "  " << sett->value("uiSize").toInt();
         }
     }
 
