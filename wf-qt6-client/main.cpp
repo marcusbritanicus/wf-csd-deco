@@ -28,6 +28,7 @@
 #include <QPainterPath>
 #include <QMenu>
 #include <QCommandLineParser>
+#include <QGraphicsDropShadowEffect>
 
 #include <qpa/qplatformnativeinterface.h>
 
@@ -166,7 +167,21 @@ void DecorationWindow::setupUI()
     baseLyt->addLayout(titleLyt);
     baseLyt->addWidget(clientArea);
 
-    setLayout(baseLyt);
+    base = new QWidget(this);
+    base->setLayout(baseLyt);
+
+    QGraphicsDropShadowEffect *shadow = new QGraphicsDropShadowEffect( base );
+    shadow->setBlurRadius(settings->shadowSize);
+    shadow->setColor(settings->shadowColor);
+    shadow->setOffset(0);
+    setGraphicsEffect( shadow );
+
+    QVBoxLayout *mainLyt = new QVBoxLayout( this );
+    mainLyt->setContentsMargins(QMargins(settings->shadowSize, settings->shadowSize, settings->shadowSize, settings->shadowSize));
+
+    mainLyt->addWidget(base);
+
+    setLayout(mainLyt);
 }
 
 // ===== Group Management - Like GTK version =====
@@ -590,10 +605,10 @@ void DecorationWindow::paintEvent(QPaintEvent *event)
     if (isMaximized())
     {
         qreal offset = settings->borderSize / 2.0;
-        painter.drawRect(QRectF(0, 0, width(), height()).adjusted(offset, offset, -offset, -offset));
+        painter.drawRect(base->geometry().adjusted(offset, offset, -offset, -offset));
     } else
     {
-        painter.drawPath(getBorderPath(QRectF(0, 0, width(), height()), radius, settings->borderSize));
+        painter.drawPath(getBorderPath(base->geometry(), radius, settings->borderSize));
     }
 
     painter.end();
