@@ -1567,7 +1567,7 @@ class csd_decoration_plugin : public wf::plugin_interface_t
 
         wf_decorator_manager_send_title_changed(decorator_resource, id, target->get_title().c_str());
         wf_decorator_manager_send_app_id_changed(decorator_resource, id, target->get_app_id().c_str());
-        do_update_borders(NULL, NULL, target->get_id(), 0, 0, 0, 0);
+        // do_update_borders(NULL, NULL, target->get_id(), 0, 0, 0, 0);
 
         /* Nudge so the client computes and sends the decorator window shadow margins */
         auto vg = target->get_geometry();

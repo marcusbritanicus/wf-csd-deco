@@ -1,6 +1,8 @@
 #include "protocol.hpp"
 #include "decorator.hpp"
 
+#include <QDir>
+#include <QTimer>
 #include <QApplication>
 #include <QWidget>
 #include <QHBoxLayout>
@@ -25,304 +27,37 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QMenu>
+#include <QCommandLineParser>
 
 #include <qpa/qplatformnativeinterface.h>
 
+QString qt6DecoCfgPath;
+
 // Global data
-static QApplication *app;
 QMap<uint32_t, QWidget*> view_to_decor;
 
-// ===== DecorationButton Implementation =====
-DecorationButton::DecorationButton(Type btnType, QWidget *parent) :
-    QWidget(parent), buttonType(btnType), mOpacity(0.25), isUnderMouse(false)
+static QPainterPath getBorderPath(QRectF rect, qreal radius, qreal penSize)
 {
-    setFixedSize(16, 16);
-    setMouseTracking(true);
+    QPainterPath path;
+    path.setFillRule(Qt::WindingFill);
 
-    opacityAnimation = new QPropertyAnimation(this, "opacity", this);
-    opacityAnimation->setDuration(200);
-    opacityAnimation->setEasingCurve(QEasingCurve::OutCubic);
-}
+    qreal offset = penSize / 2.0;
 
-void DecorationButton::setOpacity(qreal opacity)
-{
-    mOpacity = opacity;
-    update();
-}
-
-void DecorationButton::enterEvent(QEnterEvent *event)
-{
-    isUnderMouse = true;
-    animateOpacity(0.75);
-    qobject_cast<QWidget*>(parent())->repaint();
-    QWidget::enterEvent(event);
-}
-
-void DecorationButton::leaveEvent(QEvent *event)
-{
-    isUnderMouse = false;
-    animateOpacity(0.25);
-    qobject_cast<QWidget*>(parent())->repaint();
-    QWidget::leaveEvent(event);
-}
-
-void DecorationButton::mousePressEvent(QMouseEvent *event)
-{
-    if (event->button() == Qt::LeftButton)
+    if (penSize >= 2.0)
     {
-        isPressed = true;
-        animateOpacity(1.0);
-        update();
-    }
-
-    QWidget::mousePressEvent(event);
-}
-
-void DecorationButton::mouseReleaseEvent(QMouseEvent *event)
-{
-    if ((event->button() == Qt::LeftButton) && isPressed)
-    {
-        isPressed = false;
-        animateOpacity(isUnderMouse ? 0.75 : 0.25);
-        update();
-        emit clicked();
-    }
-
-    QWidget::mouseReleaseEvent(event);
-}
-
-void DecorationButton::paintEvent(QPaintEvent *event)
-{
-    QPainter painter(this);
-    painter.setRenderHint(QPainter::Antialiasing);
-
-    QColor color;
-    switch (buttonType)
-    {
-      case Type::Minimize:
-        color = Qt::darkYellow;
-        break;
-
-      case Type::Maximize:
-        color = Qt::darkCyan;
-        break;
-
-      case Type::Pin:
-        color = Qt::darkGreen;
-        break;
-
-      case Type::Close:
-        color = Qt::darkRed;
-        break;
-    }
-
-    painter.setPen(QPen(color, 2.0, Qt::SolidLine));
-    color.setAlphaF(mOpacity);
-    QRect circleRect((width() - 16) / 2, (height() - 16) / 2, 16, 16);
-    painter.setBrush(color);
-    painter.drawEllipse(circleRect.adjusted(1.0, 1.0, -1.0, -1.0));
-    painter.end();
-}
-
-void DecorationButton::animateOpacity(qreal targetOpacity)
-{
-    if (opacityAnimation->state() == QAbstractAnimation::Running)
-    {
-        opacityAnimation->stop();
-    }
-
-    opacityAnimation->setEndValue(targetOpacity);
-    opacityAnimation->start();
-}
-
-// ===== TabDragSource Implementation =====
-TabDragSource::TabDragSource(uint32_t id, QWidget *parent) :
-    QLabel(parent), wfId(id)
-{
-    setFixedSize(24, 24);
-    setScaledContents(true);
-    setStyleSheet("QLabel { border: none; background: transparent; }");
-}
-
-void TabDragSource::mousePressEvent(QMouseEvent *event)
-{
-    if (event->button() == Qt::LeftButton)
-    {
-        dragStartPos = event->pos();
-    }
-
-    QLabel::mousePressEvent(event);
-}
-
-void TabDragSource::mouseMoveEvent(QMouseEvent *event)
-{
-    if (!(event->buttons() & Qt::LeftButton))
-    {
-        return;
-    }
-
-    if ((event->pos() - dragStartPos).manhattanLength() < QApplication::startDragDistance())
-    {
-        return;
-    }
-
-    QDrag *drag = new QDrag(this);
-    QMimeData *mimeData = new QMimeData;
-    mimeData->setData("application/x-wf-window-id", QByteArray::number(wfId));
-    drag->setMimeData(mimeData);
-    drag->setPixmap(pixmap(Qt::ReturnByValue).scaled(32, 32));
-    drag->setHotSpot(QPoint(16, 16));
-    drag->exec(Qt::CopyAction | Qt::MoveAction);
-}
-
-void TabDragSource::mouseReleaseEvent(QMouseEvent *event)
-{
-    if (event->button() == Qt::LeftButton)
-    {
-        select_window(wfId);
-    }
-
-    QLabel::mouseReleaseEvent(event);
-}
-
-// ===== TabDropTarget Implementation =====
-TabDropTarget::TabDropTarget(QWidget *parent) :
-    QPushButton(parent)
-{
-    setAcceptDrops(true);
-    setFixedHeight(24);
-    setText("+");
-    setToolTip("Drop here to group windows");
-    setStyleSheet(
-        "QPushButton {"
-        "  border: 1px solid #888;"
-        "  border-radius: 3px;"
-        "  padding: 2px 8px;"
-        "  background: transparent;"
-        "}"
-        "QPushButton:hover {"
-        "  background: #d8d8d8;"
-        "}");
-    setMenu(new QMenu(this));
-}
-
-void TabDropTarget::addWindow(uint32_t wf_id, const QString & appId, const QString & title)
-{
-    QWidgetAction *action = new QWidgetAction(menu());
-    GroupEntry *entry     = new GroupEntry(wf_id, appId, title, menu());
-    action->setDefaultWidget(entry);
-    action->setData(wf_id);
-
-    // Click on the menu item → select the window
-    connect(action, &QAction::triggered, this, [wf_id] ()
-    {
-        select_window(wf_id);
-    });
-
-    // Ungroup button clicked → perform full ungroup
-    connect(entry, &GroupEntry::ungroup, this, [this, wf_id] ()
-    {
-        DecorationWindow *parentWin = qobject_cast<DecorationWindow*>(parent());
-        if (!parentWin)
-        {
-            return;
-        }
-
-        parentWin->ungroup(wf_id, true);
-    });
-
-    menu()->addAction(action);
-    updateButtonState();
-}
-
-void TabDropTarget::removeWindow(uint32_t wf_id)
-{
-    for (QAction *action : menu()->actions())
-    {
-        if (action->data().toUInt() == wf_id)
-        {
-            menu()->removeAction(action);
-            delete action;
-            break;
-        }
-    }
-
-    updateButtonState();
-}
-
-void TabDropTarget::clearAll()
-{
-    menu()->clear();
-    updateButtonState();
-}
-
-void TabDropTarget::updateButtonState()
-{
-    if (menu()->actions().isEmpty())
-    {
-        setIcon(QIcon());
-        setText("+");
-        setToolTip("Drop here to group windows");
+        path.addRoundedRect(rect.adjusted(offset, offset, -offset, -offset), radius, radius);
     } else
     {
-        QAction *first = menu()->actions().first();
-        setIcon(first->icon());
-        setText(first->text());
-        setToolTip(QString("Group of %1 windows").arg(menu()->actions().size()));
+        QRectF topRect    = QRectF(0, 0, rect.width(), radius * 2).adjusted(offset, offset, -offset, -offset);
+        QRectF bottomRect = QRectF(0, radius, rect.width(), rect.height() - radius).adjusted(offset, offset,
+            -offset,
+            -offset);
+
+        path.addRoundedRect(topRect, radius, radius);
+        path.addRect(bottomRect);
     }
-}
 
-void TabDropTarget::dragEnterEvent(QDragEnterEvent *event)
-{
-    if (event->mimeData()->hasFormat("application/x-wf-window-id"))
-    {
-        event->acceptProposedAction();
-        setStyleSheet(
-            "QPushButton {"
-            "  border: 2px solid #4CAF50;"
-            "  border-radius: 3px;"
-            "  padding: 2px 8px;"
-            "  background: #c8e6c9;"
-            "}");
-    }
-}
-
-void TabDropTarget::dragLeaveEvent(QDragLeaveEvent *event)
-{
-    setStyleSheet(
-        "QPushButton {"
-        "  border: 1px solid #888;"
-        "  border-radius: 3px;"
-        "  padding: 2px 8px;"
-        "  background: transparent;"
-        "}");
-    QPushButton::dragLeaveEvent(event);
-}
-
-void TabDropTarget::dropEvent(QDropEvent *event)
-{
-    setStyleSheet(
-        "QPushButton {"
-        "  border: 1px solid #888;"
-        "  border-radius: 3px;"
-        "  padding: 2px 8px;"
-        "  background: transparent;"
-        "}");
-
-    if (event->mimeData()->hasFormat("application/x-wf-window-id"))
-    {
-        bool ok;
-        uint32_t dropped_wf_id = event->mimeData()->data("application/x-wf-window-id").toUInt(&ok);
-        if (ok)
-        {
-            DecorationWindow *targetWindow = qobject_cast<DecorationWindow*>(parent());
-            if (targetWindow)
-            {
-                targetWindow->group(targetWindow->getWfId(), dropped_wf_id);
-                event->acceptProposedAction();
-            }
-        }
-    }
+    return path.simplified();
 }
 
 // ===== DecorationWindow Implementation =====
@@ -331,6 +66,29 @@ DecorationWindow::DecorationWindow(uint32_t id, QWidget *parent) :
 {
     setWindowFlags(
         Qt::Window | Qt::CustomizeWindowHint | Qt::FramelessWindowHint | Qt::BypassWindowManagerHint);
+
+    settings = new Settings(this);
+
+    connect(
+        settings.get(), &Settings::settingsChanged, this, [this] ()
+    {
+        baseLyt->setContentsMargins(QMargins(settings->borderSize, 0, settings->borderSize,
+            settings->borderSize));
+        iconLbl->setFixedSize(QSize(settings->uiSize, settings->uiSize));
+        titleLbl->setStyleSheet(QString("QLabel { color: %1; }").arg(settings->textColor.name()));
+        minBtn->setFixedSize(QSize(settings->uiSize, settings->uiSize));
+        maxBtn->setFixedSize(QSize(settings->uiSize, settings->uiSize));
+        closeBtn->setFixedSize(QSize(settings->uiSize, settings->uiSize));
+        groupBtn->setFixedHeight(settings->uiSize);
+
+        resize(size());
+
+        QPoint relative_position = clientArea->mapTo(window(), QPoint(0, 0));
+        update_borders(wf_id, relative_position.y(), relative_position.x() * 2 + 1,
+            relative_position.x(), relative_position.x());
+
+        repaint();
+    });
 
     setAttribute(Qt::WA_TranslucentBackground);
     setMouseTracking(true);
@@ -349,23 +107,25 @@ DecorationWindow::~DecorationWindow()
 void DecorationWindow::setupUI()
 {
     baseLyt = new QVBoxLayout();
-    baseLyt->setContentsMargins(QMargins(defaultBorderSize, 0, defaultBorderSize, defaultBorderSize));
+    baseLyt->setContentsMargins(QMargins(settings->borderSize, 0, settings->borderSize,
+        settings->borderSize));
     baseLyt->setSpacing(0);
 
     iconLbl = new TabDragSource(wf_id, this);
-    iconLbl->setFixedSize(QSize(24, 24));
-    iconLbl->setPixmap(QIcon::fromTheme("wayfire").pixmap(24));
+    iconLbl->setFixedSize(QSize(settings->uiSize, settings->uiSize));
+    iconLbl->setPixmap(QIcon::fromTheme("wayfire").pixmap(settings->uiSize));
 
     titleLbl = new QLabel(this);
-    titleLbl->setStyleSheet("QLabel { color: #AAFFFFFF; }");
+    titleLbl->setStyleSheet(QString("QLabel { color: %1; }").arg(settings->textColor.name()));
+    titleLbl->setFont(settings->titleFont);
 
     minBtn = new DecorationButton(DecorationButton::Type::Minimize, this);
-    minBtn->setFixedSize(QSize(24, 24));
+    minBtn->setFixedSize(QSize(settings->uiSize, settings->uiSize));
     minBtn->setMouseTracking(true);
     connect(minBtn, &DecorationButton::clicked, this, &QWidget::showMinimized);
 
     maxBtn = new DecorationButton(DecorationButton::Type::Maximize, this);
-    maxBtn->setFixedSize(QSize(24, 24));
+    maxBtn->setFixedSize(QSize(settings->uiSize, settings->uiSize));
     maxBtn->setMouseTracking(true);
     connect(maxBtn, &DecorationButton::clicked, [this] ()
     {
@@ -379,12 +139,12 @@ void DecorationWindow::setupUI()
     });
 
     closeBtn = new DecorationButton(DecorationButton::Type::Close, this);
-    closeBtn->setFixedSize(QSize(24, 24));
+    closeBtn->setFixedSize(QSize(settings->uiSize, settings->uiSize));
     closeBtn->setMouseTracking(true);
     connect(closeBtn, &DecorationButton::clicked, this, &QWidget::close);
 
     groupBtn = new TabDropTarget(this);
-    groupBtn->setFixedHeight(24);
+    groupBtn->setFixedHeight(settings->uiSize);
 
     clientArea = new QWidget();
     clientArea->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
@@ -738,18 +498,18 @@ Qt::Edges DecorationWindow::getEdgesAt(const QPoint & pos)
 {
     int padding     = 3;
     Qt::Edges edges = {};
-    if (pos.x() <= defaultBorderSize + padding)
+    if (pos.x() <= settings->borderSize + padding)
     {
         edges |= Qt::LeftEdge;
-    } else if (pos.x() >= width() - defaultBorderSize - padding)
+    } else if (pos.x() >= width() - settings->borderSize - padding)
     {
         edges |= Qt::RightEdge;
     }
 
-    if (pos.y() <= defaultBorderSize + padding)
+    if (pos.y() <= settings->borderSize + padding)
     {
         edges |= Qt::TopEdge;
-    } else if (pos.y() >= height() - defaultBorderSize - padding)
+    } else if (pos.y() >= height() - settings->borderSize - padding)
     {
         edges |= Qt::BottomEdge;
     }
@@ -814,44 +574,25 @@ void DecorationWindow::paintEvent(QPaintEvent *event)
     painter.setRenderHints(QPainter::Antialiasing);
 
     qreal radius = 5.0;
-    qreal offset = defaultBorderSize / 2.0;
 
     if (isActive)
     {
-        painter.setPen(QPen(palette().color(QPalette::Accent), defaultBorderSize));
+        painter.setPen(QPen(settings->activeBorderColor, settings->borderSize));
     } else
     {
-        painter.setPen(QPen(QColor(29, 29, 29), defaultBorderSize));
+        painter.setPen(QPen(settings->inactiveBorderColor, settings->borderSize));
     }
 
-    if (minBtn->isUnderMouse)
+    painter.setBrush(settings->baseColor);
+
+    if (isMaximized())
     {
-        painter.setPen(QPen(Qt::darkYellow, defaultBorderSize));
-    }
-
-    if (maxBtn->isUnderMouse)
+        qreal offset = settings->borderSize / 2.0;
+        painter.drawRect(QRectF(0, 0, width(), height()).adjusted(offset, offset, -offset, -offset));
+    } else
     {
-        painter.setPen(QPen(Qt::darkCyan, defaultBorderSize));
+        painter.drawPath(getBorderPath(QRectF(0, 0, width(), height()), radius, settings->borderSize));
     }
-
-    if (closeBtn->isUnderMouse)
-    {
-        painter.setPen(QPen(Qt::darkRed, defaultBorderSize));
-    }
-
-    painter.setBrush(QColor(29, 29, 29));
-
-    QPainterPath path;
-    path.setFillRule(Qt::WindingFill);
-
-    QRectF topRect    = QRectF(0, 0, width(), radius * 2).adjusted(offset, offset, -offset, -offset);
-    QRectF bottomRect = QRectF(0, radius, width(), height() - radius).adjusted(offset, offset, -offset,
-        -offset);
-
-    path.addRoundedRect(topRect, radius, radius);
-    path.addRect(bottomRect);
-
-    painter.drawPath(path.simplified());
 
     painter.end();
 }
@@ -869,10 +610,10 @@ void DecorationWindow::setAppId(const QString & appId)
     QPixmap pixmap;
     if (QIcon::hasThemeIcon(appId))
     {
-        pixmap = QIcon::fromTheme(appId).pixmap(24);
+        pixmap = QIcon::fromTheme(appId).pixmap(settings->uiSize);
     } else
     {
-        pixmap = QIcon::fromTheme("wayfire").pixmap(24);
+        pixmap = QIcon::fromTheme("wayfire").pixmap(settings->uiSize);
     }
 
     if (iconLbl)
@@ -890,7 +631,300 @@ void DecorationWindow::setAppId(const QString & appId)
 void DecorationWindow::markAsActive(bool active)
 {
     isActive = active;
-    window()->repaint();
+    repaint();
+}
+
+// ===== DecorationButton Implementation =====
+DecorationButton::DecorationButton(Type btnType, QWidget *parent) :
+    QWidget(parent), buttonType(btnType), mOpacity(0.25), isUnderMouse(false)
+{
+    setFixedSize(16, 16);
+    setMouseTracking(true);
+
+    opacityAnimation = new QPropertyAnimation(this, "opacity", this);
+    opacityAnimation->setDuration(200);
+    opacityAnimation->setEasingCurve(QEasingCurve::OutCubic);
+}
+
+void DecorationButton::setOpacity(qreal opacity)
+{
+    mOpacity = opacity;
+    update();
+}
+
+void DecorationButton::enterEvent(QEnterEvent *event)
+{
+    isUnderMouse = true;
+    animateOpacity(0.75);
+    qobject_cast<QWidget*>(parent())->repaint();
+    QWidget::enterEvent(event);
+}
+
+void DecorationButton::leaveEvent(QEvent *event)
+{
+    isUnderMouse = false;
+    animateOpacity(0.25);
+    qobject_cast<QWidget*>(parent())->repaint();
+    QWidget::leaveEvent(event);
+}
+
+void DecorationButton::mousePressEvent(QMouseEvent *event)
+{
+    if (event->button() == Qt::LeftButton)
+    {
+        isPressed = true;
+        animateOpacity(1.0);
+        update();
+    }
+
+    QWidget::mousePressEvent(event);
+}
+
+void DecorationButton::mouseReleaseEvent(QMouseEvent *event)
+{
+    if ((event->button() == Qt::LeftButton) && isPressed)
+    {
+        isPressed = false;
+        animateOpacity(isUnderMouse ? 0.75 : 0.25);
+        update();
+        emit clicked();
+    }
+
+    QWidget::mouseReleaseEvent(event);
+}
+
+void DecorationButton::paintEvent(QPaintEvent *event)
+{
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing);
+
+    QColor color;
+    switch (buttonType)
+    {
+      case Type::Minimize:
+        color = Qt::darkYellow;
+        break;
+
+      case Type::Maximize:
+        color = Qt::darkCyan;
+        break;
+
+      case Type::Pin:
+        color = Qt::darkGreen;
+        break;
+
+      case Type::Close:
+        color = Qt::darkRed;
+        break;
+    }
+
+    painter.setPen(QPen(color, 2.0, Qt::SolidLine));
+    color.setAlphaF(mOpacity);
+    QRect circleRect((width() - 16) / 2, (height() - 16) / 2, 16, 16);
+    painter.setBrush(color);
+    painter.drawEllipse(circleRect.adjusted(1.0, 1.0, -1.0, -1.0));
+    painter.end();
+}
+
+void DecorationButton::animateOpacity(qreal targetOpacity)
+{
+    if (opacityAnimation->state() == QAbstractAnimation::Running)
+    {
+        opacityAnimation->stop();
+    }
+
+    opacityAnimation->setEndValue(targetOpacity);
+    opacityAnimation->start();
+}
+
+// ===== TabDragSource Implementation =====
+TabDragSource::TabDragSource(uint32_t id, QWidget *parent) :
+    QLabel(parent), wfId(id)
+{
+    setFixedSize(24, 24);
+    setScaledContents(true);
+    setStyleSheet("QLabel { border: none; background: transparent; }");
+}
+
+void TabDragSource::mousePressEvent(QMouseEvent *event)
+{
+    if (event->button() == Qt::LeftButton)
+    {
+        dragStartPos = event->pos();
+    }
+
+    QLabel::mousePressEvent(event);
+}
+
+void TabDragSource::mouseMoveEvent(QMouseEvent *event)
+{
+    if (!(event->buttons() & Qt::LeftButton))
+    {
+        return;
+    }
+
+    if ((event->pos() - dragStartPos).manhattanLength() < QApplication::startDragDistance())
+    {
+        return;
+    }
+
+    QDrag *drag = new QDrag(this);
+    QMimeData *mimeData = new QMimeData;
+    mimeData->setData("application/x-wf-window-id", QByteArray::number(wfId));
+    drag->setMimeData(mimeData);
+    drag->setPixmap(pixmap(Qt::ReturnByValue).scaled(32, 32));
+    drag->setHotSpot(QPoint(16, 16));
+    drag->exec(Qt::CopyAction | Qt::MoveAction);
+}
+
+void TabDragSource::mouseReleaseEvent(QMouseEvent *event)
+{
+    if (event->button() == Qt::LeftButton)
+    {
+        select_window(wfId);
+    }
+
+    QLabel::mouseReleaseEvent(event);
+}
+
+// ===== TabDropTarget Implementation =====
+TabDropTarget::TabDropTarget(QWidget *parent) :
+    QPushButton(parent)
+{
+    setAcceptDrops(true);
+    setFixedHeight(24);
+    setText("+");
+    setToolTip("Drop here to group windows");
+    setStyleSheet(
+        "QPushButton {"
+        "  border: 1px solid #888;"
+        "  border-radius: 3px;"
+        "  padding: 2px 8px;"
+        "  background: transparent;"
+        "}"
+        "QPushButton:hover {"
+        "  background: #d8d8d8;"
+        "}");
+    setMenu(new QMenu(this));
+}
+
+void TabDropTarget::addWindow(uint32_t wf_id, const QString & appId, const QString & title)
+{
+    QWidgetAction *action = new QWidgetAction(menu());
+    GroupEntry *entry     = new GroupEntry(wf_id, appId, title, menu());
+    action->setDefaultWidget(entry);
+    action->setData(wf_id);
+
+    // Click on the menu item → select the window
+    connect(action, &QAction::triggered, this, [wf_id] ()
+    {
+        select_window(wf_id);
+    });
+
+    // Ungroup button clicked → perform full ungroup
+    connect(entry, &GroupEntry::ungroup, this, [this, wf_id] ()
+    {
+        DecorationWindow *parentWin = qobject_cast<DecorationWindow*>(parent());
+        if (!parentWin)
+        {
+            return;
+        }
+
+        parentWin->ungroup(wf_id, true);
+    });
+
+    menu()->addAction(action);
+    updateButtonState();
+}
+
+void TabDropTarget::removeWindow(uint32_t wf_id)
+{
+    for (QAction *action : menu()->actions())
+    {
+        if (action->data().toUInt() == wf_id)
+        {
+            menu()->removeAction(action);
+            delete action;
+            break;
+        }
+    }
+
+    updateButtonState();
+}
+
+void TabDropTarget::clearAll()
+{
+    menu()->clear();
+    updateButtonState();
+}
+
+void TabDropTarget::updateButtonState()
+{
+    if (menu()->actions().isEmpty())
+    {
+        setIcon(QIcon());
+        setText("+");
+        setToolTip("Drop here to group windows");
+    } else
+    {
+        QAction *first = menu()->actions().first();
+        setIcon(first->icon());
+        setText(first->text());
+        setToolTip(QString("Group of %1 windows").arg(menu()->actions().size()));
+    }
+}
+
+void TabDropTarget::dragEnterEvent(QDragEnterEvent *event)
+{
+    if (event->mimeData()->hasFormat("application/x-wf-window-id"))
+    {
+        event->acceptProposedAction();
+        setStyleSheet(
+            "QPushButton {"
+            "  border: 2px solid #4CAF50;"
+            "  border-radius: 3px;"
+            "  padding: 2px 8px;"
+            "  background: #c8e6c9;"
+            "}");
+    }
+}
+
+void TabDropTarget::dragLeaveEvent(QDragLeaveEvent *event)
+{
+    setStyleSheet(
+        "QPushButton {"
+        "  border: 1px solid #888;"
+        "  border-radius: 3px;"
+        "  padding: 2px 8px;"
+        "  background: transparent;"
+        "}");
+    QPushButton::dragLeaveEvent(event);
+}
+
+void TabDropTarget::dropEvent(QDropEvent *event)
+{
+    setStyleSheet(
+        "QPushButton {"
+        "  border: 1px solid #888;"
+        "  border-radius: 3px;"
+        "  padding: 2px 8px;"
+        "  background: transparent;"
+        "}");
+
+    if (event->mimeData()->hasFormat("application/x-wf-window-id"))
+    {
+        bool ok;
+        uint32_t dropped_wf_id = event->mimeData()->data("application/x-wf-window-id").toUInt(&ok);
+        if (ok)
+        {
+            DecorationWindow *targetWindow = qobject_cast<DecorationWindow*>(parent());
+            if (targetWindow)
+            {
+                targetWindow->group(targetWindow->getWfId(), dropped_wf_id);
+                event->acceptProposedAction();
+            }
+        }
+    }
 }
 
 // ===== GroupEntry =====
@@ -934,13 +968,148 @@ GroupEntry::GroupEntry(uint32_t wf_id, const QString & appId, const QString & ti
     setLayout(lyt);
 }
 
+// ===== Settings =====
+
+Settings::Settings(QObject *parent) : QObject(parent)
+{
+    /** -c was not used. Let's see env var */
+    if (qt6DecoCfgPath.isEmpty())
+    {
+        QString qt6DecoCfgPath = qgetenv("WF_QT6_DECO_CONFIG_PATH");
+    }
+
+    /** env var was also not set, let's use the default path */
+    if (qt6DecoCfgPath.isEmpty())
+    {
+        qt6DecoCfgPath = QDir::home().filePath(".config/wayfire/csd-decorator/qt6deco.ini");
+    }
+
+    sett = new QSettings(qt6DecoCfgPath, QSettings::IniFormat);
+    loadSettings();
+
+    fsw = new QFileSystemWatcher(this);
+    fsw->addPath(qt6DecoCfgPath);
+
+    connect(fsw, &QFileSystemWatcher::fileChanged, [this, qt6DecoCfgPath] (QString path)
+    {
+        if (!fsw->files().contains(qt6DecoCfgPath))
+        {
+            QTimer::singleShot(250, [this, qt6DecoCfgPath] ()
+            {
+                loadSettings();
+                fsw->addPath(qt6DecoCfgPath);
+                emit settingsChanged();
+            });
+        } else
+        {
+            loadSettings();
+            emit settingsChanged();
+        }
+    });
+}
+
+void Settings::loadSettings()
+{
+    sett->sync();
+    if (sett->contains("borderSize"))
+    {
+        QVariant borderSizeVar = sett->value("borderSize", activeBorderColor);
+        if (borderSizeVar.isValid() && borderSizeVar.canConvert<int>())
+        {
+            borderSize = borderSizeVar.toInt();
+        }
+    }
+
+    if (sett->contains("uiSize"))
+    {
+        QVariant uiSizeVar = sett->value("uiSize", activeBorderColor);
+        if (uiSizeVar.isValid() && uiSizeVar.canConvert<int>())
+        {
+            uiSize = uiSizeVar.toInt();
+            qCritical() << "-------->" << uiSize << "  " << sett->value("uiSize").toInt();
+        }
+    }
+
+    if (sett->contains("baseColor"))
+    {
+        QVariant baseColorVar = sett->value("baseColor", activeBorderColor);
+        if (baseColorVar.isValid() && baseColorVar.canConvert<QColor>())
+        {
+            baseColor = baseColorVar.value<QColor>();
+        }
+    }
+
+    if (sett->contains("textColor"))
+    {
+        QVariant textColorVar = sett->value("textColor", activeBorderColor);
+        if (textColorVar.isValid() && textColorVar.canConvert<QColor>())
+        {
+            textColor = textColorVar.value<QColor>();
+        }
+    }
+
+    if (sett->contains("titleFont"))
+    {
+        QVariant titleFontVar = sett->value("titleFont", activeBorderColor);
+        if (titleFontVar.isValid() && titleFontVar.canConvert<QFont>())
+        {
+            titleFont = titleFontVar.value<QFont>();
+        }
+    }
+
+    if (sett->contains("activeBorderColor"))
+    {
+        QVariant activeBorderColorVar = sett->value("activeBorderColor", activeBorderColor);
+        if (activeBorderColorVar.isValid() && activeBorderColorVar.canConvert<QColor>())
+        {
+            activeBorderColor = activeBorderColorVar.value<QColor>();
+        }
+    }
+
+    if (sett->contains("inactiveBorderColor"))
+    {
+        QVariant inactiveBorderColorVar = sett->value("inactiveBorderColor", activeBorderColor);
+        if (inactiveBorderColorVar.isValid() && inactiveBorderColorVar.canConvert<QColor>())
+        {
+            inactiveBorderColor = inactiveBorderColorVar.value<QColor>();
+        }
+    }
+
+    if (sett->contains("shadowSize"))
+    {
+        QVariant shadowSizeVar = sett->value("shadowSize", activeBorderColor);
+        if (shadowSizeVar.isValid() && shadowSizeVar.canConvert<int>())
+        {
+            shadowSize = shadowSizeVar.toInt();
+        }
+    }
+
+    if (sett->contains("shadowColor"))
+    {
+        QVariant shadowColorVar = sett->value("shadowColor", activeBorderColor);
+        if (shadowColorVar.isValid() && shadowColorVar.canConvert<QColor>())
+        {
+            shadowColor = shadowColorVar.value<QColor>();
+        }
+    }
+}
+
 // ===== Main =====
 
 int main(int argc, char *argv[])
 {
-    QApplication a(argc, argv);
-    a.setDesktopFileName("org.wf.sample-decorator");
-    app = &a;
+    QApplication app(argc, argv);
+    app.setDesktopFileName("org.wf.sample-decorator");
+
+    QCommandLineParser parser;
+    parser.addOption({{"c", "config"}, "Configuration file path", "config"});
+
+    parser.process(app);
+
+    if (parser.isSet("config"))
+    {
+        qt6DecoCfgPath = parser.value("config");
+    }
 
     QPlatformNativeInterface *native = QGuiApplication::platformNativeInterface();
 
@@ -950,7 +1119,7 @@ int main(int argc, char *argv[])
             reinterpret_cast<wl_display*>(native->nativeResourceForIntegration("display"));
 
         setup_protocol(display);
-        return a.exec();
+        return app.exec();
     } else
     {
         qFatal() << "Unable to get wayland display!";

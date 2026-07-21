@@ -27,10 +27,13 @@
 #include <QAbstractAnimation>
 #include <QPropertyAnimation>
 #include <QWidgetAction>
+#include <QSettings>
+#include <QFileSystemWatcher>
 
 class DecorationButton;
 class TabDragSource;
 class TabDropTarget;
+class Settings;
 
 class DecorationWindow : public QWidget
 {
@@ -87,7 +90,9 @@ class DecorationWindow : public QWidget
 
     Qt::Edges getEdgesAt(const QPoint & pos);
     void updateCursorShape(const QPoint & pos);
-    int defaultBorderSize = 1;
+    int defaultBorderSize = 2;
+
+    QPointer<Settings> settings;
 
     bool isActive = false;
 };
@@ -191,4 +196,47 @@ class GroupEntry : public QWidget
   protected:
     // void mousePressEvent(QMouseEvent *event) override;
     // void mouseReleaseEvent(QMouseEvent *event) override;
+};
+
+class Settings : public QObject
+{
+    Q_OBJECT
+
+  public:
+    Settings(QObject *parent);
+
+    /* Default border size, can be zero */
+    int borderSize = 2;
+
+    /* Default border size, can be zero */
+    int uiSize = 24;
+
+    /* Base titlebar color, can be transparent */
+    QColor baseColor = QColor(29, 29, 29);
+
+    /* Titlebar text color, contrasts with baseColor */
+    QColor textColor = QColor(Qt::white);
+
+    /* Titlebar font */
+    QFont titleFont = QFont("sans", 10);
+
+    /* Active border color, can be transparent */
+    QColor activeBorderColor = QColor("#008080");
+
+    /* Inactive border color, can be transparent */
+    QColor inactiveBorderColor = QColor(29, 29, 29);
+
+    /* Shadow size */
+    int shadowSize = 10;
+
+    /* Shadow color */
+    QColor shadowColor = QColor(0, 0, 0);
+
+    Q_SIGNAL void settingsChanged();
+
+  private:
+    QPointer<QSettings> sett;
+    QPointer<QFileSystemWatcher> fsw;
+
+    void loadSettings();
 };
