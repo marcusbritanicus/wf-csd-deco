@@ -210,6 +210,7 @@ static const std::string csd_decorator_prefix = "__wf_decorator:";
 wl_resource *decorator_resource = NULL;
 wl_listener deco_client_destroy_listener;
 void select_window(uint32_t select_id);
+void notify_focus(uint32_t focus_id);
 void ungroup_window(wl_client*, struct wl_resource*, uint32_t id, bool closing);
 
 class csd_decoration_object_t : public wf::txn::transaction_object_t
@@ -545,6 +546,7 @@ class csd_decoration_object_t : public wf::txn::transaction_object_t
         on_request_deco_maximize.connect(&toplevel->events.request_maximize);
         target_view->connect(&on_view_tiled);
         target_view->connect(&on_fullscreen);
+        target_view->connect(&on_view_activated);
         target_view->connect(&on_view_minimized);
         target_view->connect(&on_target_unmapped);
         target_view->connect(&on_view_title_changed);
@@ -569,6 +571,11 @@ class csd_decoration_object_t : public wf::txn::transaction_object_t
         } else
         {
             wf::scene::add_front(target_view->get_surface_root_node(), root_node);
+        }
+
+        if (wf::get_core().seat->get_active_view() == target_view)
+        {
+            notify_focus(target_view->get_id());
         }
     }
 
@@ -595,6 +602,7 @@ class csd_decoration_object_t : public wf::txn::transaction_object_t
         on_fullscreen.disconnect();
         on_view_tiled.disconnect();
         on_view_minimized.disconnect();
+        on_view_activated.disconnect();
         on_view_title_changed.disconnect();
         on_view_focus_request.disconnect();
 
@@ -754,6 +762,15 @@ class csd_decoration_object_t : public wf::txn::transaction_object_t
         }
     };
 
+    wf::signal::connection_t<wf::view_activated_state_signal> on_view_activated =
+        [=] (wf::view_activated_state_signal*)
+    {
+        if (wf::get_core().seat->get_active_view() == target_view)
+        {
+            notify_focus(target_view->get_id());
+        }
+    };
+
     wf::signal::connection_t<wf::view_fullscreen_signal> on_fullscreen =
         [=] (wf::view_fullscreen_signal *ev)
     {
@@ -904,7 +921,7 @@ class csd_decoration_object_t : public wf::txn::transaction_object_t
             .x     = bbox.x + margin_left,
             .y     = bbox.y + margin_top,
             .width = bbox.width - margin_left * 2,
-            .height = bbox.height - margin_top - margin_left - margin_bottom + 1,
+            .height = bbox.height - margin_top - margin_left,
         };
         masked->allowed ^= cut_out;
     }
@@ -961,7 +978,7 @@ void do_update_borders(wl_client*, struct wl_resource*, uint32_t id, uint32_t to
     LOGI(use_csd);
 
     deco_margins.top    = top - left - 1;
-    deco_margins.bottom = right + 1;
+    deco_margins.bottom = bottom;
     deco_margins.left   = right;
     deco_margins.right  = right;
     data->decoration->set_margins(top, bottom, left, right, data->margin_offset);
@@ -1052,6 +1069,14 @@ void do_group_windows(wl_client*, struct wl_resource*, uint32_t parent_id, uint3
     }
 
     wf::get_core().seat->focus_view(parent);
+}
+
+void notify_focus(uint32_t focus_id)
+{
+    if (decorator_resource)
+    {
+        wf_decorator_manager_send_notify_focus(decorator_resource, focus_id);
+    }
 }
 
 void select_window(uint32_t select_id)

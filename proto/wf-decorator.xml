@@ -42,5 +42,9 @@
             <arg name="decoration" type="uint"/>
             <arg name="new_app_id" type="string"/>
         </event>
+
+        <event name="notify_focus">
+            <arg name="id" type="uint"/>
+        </event>
     </interface>
 </protocol>

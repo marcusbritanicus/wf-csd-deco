@@ -35,11 +35,27 @@ static void app_id_changed(void*, wf_decorator_manager*, uint32_t view, const ch
     set_app_id(view_to_decor[view], new_app_id);
 }
 
-const wf_decorator_manager_listener decorator_listener = {
+static void notify_focus(void*, wf_decorator_manager*, uint32_t view)
+{
+    for (uint32_t view_id : view_to_decor.keys())
+    {
+        if (view_id == view)
+        {
+            qobject_cast<DecorationWindow*>(view_to_decor[view_id])->markAsActive(true);
+        } else
+        {
+            qobject_cast<DecorationWindow*>(view_to_decor[view_id])->markAsActive(false);
+        }
+    }
+}
+
+const wf_decorator_manager_listener decorator_listener =
+{
     create_new_decoration,
     destroy_decoration,
     title_changed,
-    app_id_changed
+    app_id_changed,
+    notify_focus
 };
 
 void registry_add_object(void*, struct wl_registry *registry, uint32_t id,

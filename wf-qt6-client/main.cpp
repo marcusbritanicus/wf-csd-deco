@@ -730,7 +730,7 @@ void DecorationWindow::resizeEvent(QResizeEvent *event)
     QWidget::resizeEvent(event);
 
     QPoint relative_position = clientArea->mapTo(window(), QPoint(0, 0));
-    update_borders(wf_id, relative_position.y(), relative_position.x(),
+    update_borders(wf_id, relative_position.y(), relative_position.x() * 2 + 1,
         relative_position.x(), relative_position.x());
 }
 
@@ -816,12 +816,12 @@ void DecorationWindow::paintEvent(QPaintEvent *event)
     qreal radius = 5.0;
     qreal offset = defaultBorderSize / 2.0;
 
-    if (hasFocus() || isActiveWindow())
+    if (isActive)
     {
-        painter.setPen(QPen(palette().color(QPalette::Highlight), defaultBorderSize));
+        painter.setPen(QPen(palette().color(QPalette::Accent), defaultBorderSize));
     } else
     {
-        painter.setPen(QPen(palette().color(QPalette::Highlight), defaultBorderSize));
+        painter.setPen(QPen(QColor(29, 29, 29), defaultBorderSize));
     }
 
     if (minBtn->isUnderMouse)
@@ -885,6 +885,12 @@ void DecorationWindow::setAppId(const QString & appId)
     {
         groupBtn->addWindow(wf_id, appId, windowTitle());
     }
+}
+
+void DecorationWindow::markAsActive(bool active)
+{
+    isActive = active;
+    window()->repaint();
 }
 
 // ===== GroupEntry =====

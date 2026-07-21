@@ -31,12 +31,16 @@ static void app_id_changed(void*,
     set_app_id(view_to_decor[view], new_app_id);
 }
 
+static void notify_focus(void*, wf_decorator_manager*, uint32_t view)
+{}
+
 const wf_decorator_manager_listener decorator_listener =
 {
     create_new_decoration,
     destroy_decoration,
     title_changed,
-    app_id_changed
+    app_id_changed,
+    notify_focus
 };
 
 static uint32_t decorator_global_id;

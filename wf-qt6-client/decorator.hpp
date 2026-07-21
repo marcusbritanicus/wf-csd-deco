@@ -42,6 +42,7 @@ class DecorationWindow : public QWidget
 
     void setWindowTitle(const QString & title);
     void setAppId(const QString & appId);
+    void markAsActive(bool active);
     uint32_t getWfId() const
     {
         return wf_id;
@@ -87,6 +88,8 @@ class DecorationWindow : public QWidget
     Qt::Edges getEdgesAt(const QPoint & pos);
     void updateCursorShape(const QPoint & pos);
     int defaultBorderSize = 1;
+
+    bool isActive = false;
 };
 
 class DecorationButton : public QWidget
