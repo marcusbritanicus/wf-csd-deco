@@ -77,7 +77,8 @@ class DecorationWindow : public QWidget
     uint32_t groupId;
     QList<uint32_t> groupOrder;
 
-    QVBoxLayout *baseLyt;
+    QPointer<QVBoxLayout> baseLyt;
+    QPointer<QWidget> base;
     QPointer<QWidget> clientArea;
 
     QPointer<TabDragSource> iconLbl;
