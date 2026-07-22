@@ -85,14 +85,15 @@ void close_request(uint32_t id)
     wf_decorator_manager_close_request(decorator_manager, id);
 }
 
-void update_borders(uint32_t id, uint32_t top, uint32_t bottom, uint32_t left, uint32_t right)
+void update_borders(uint32_t id, uint32_t top, uint32_t bottom, uint32_t left, uint32_t right,
+    uint32_t border)
 {
     if (!decorator_manager)
     {
         return;
     }
 
-    wf_decorator_manager_update_borders(decorator_manager, id, top, bottom, left, right);
+    wf_decorator_manager_update_borders(decorator_manager, id, top, bottom, left, right, border);
 }
 
 void group_windows(uint32_t parent_id, uint32_t child_id)

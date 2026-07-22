@@ -72,7 +72,7 @@ DecorationWindow::DecorationWindow(uint32_t id, QWidget *parent) :
     connect(
         settings.get(), &Settings::settingsChanged, this, [this] ()
     {
-        baseLyt->setContentsMargins(QMargins(settings->borderSize, 0, settings->borderSize,
+        baseLyt->setContentsMargins(QMargins(settings->borderSize, settings->borderSize, settings->borderSize,
             settings->borderSize));
         iconLbl->setFixedSize(QSize(settings->uiSize, settings->uiSize));
         titleLbl->setStyleSheet(QString("QLabel { color: %1; }").arg(settings->textColor.name()));
@@ -84,8 +84,8 @@ DecorationWindow::DecorationWindow(uint32_t id, QWidget *parent) :
         resize(size());
 
         QPoint relative_position = clientArea->mapTo(window(), QPoint(0, 0));
-        update_borders(wf_id, relative_position.y(), relative_position.x() * 2 + 1,
-            relative_position.x(), relative_position.x());
+        update_borders(wf_id, relative_position.y(), 0,
+            relative_position.x(), relative_position.x(), settings->borderSize);
 
         repaint();
     });
@@ -107,7 +107,7 @@ DecorationWindow::~DecorationWindow()
 void DecorationWindow::setupUI()
 {
     baseLyt = new QVBoxLayout();
-    baseLyt->setContentsMargins(QMargins(settings->borderSize, 0, settings->borderSize,
+    baseLyt->setContentsMargins(QMargins(settings->borderSize, settings->borderSize, settings->borderSize,
         settings->borderSize));
     baseLyt->setSpacing(0);
 
@@ -129,16 +129,8 @@ void DecorationWindow::setupUI()
     maxBtn = new DecorationButton(DecorationButton::Type::Maximize, this);
     maxBtn->setFixedSize(QSize(settings->uiSize, settings->uiSize));
     maxBtn->setMouseTracking(true);
-    connect(maxBtn, &DecorationButton::clicked, [this] ()
-    {
-        if (isMaximized())
-        {
-            showNormal();
-        } else
-        {
-            showMaximized();
-        }
-    });
+    /** Although this seems counter-intuitive, this works. */
+    connect(maxBtn, &DecorationButton::clicked, this, &QWidget::showMaximized);
 
     closeBtn = new DecorationButton(DecorationButton::Type::Close, this);
     closeBtn->setFixedSize(QSize(settings->uiSize, settings->uiSize));
@@ -492,8 +484,8 @@ void DecorationWindow::resizeEvent(QResizeEvent *event)
     QWidget::resizeEvent(event);
 
     QPoint relative_position = clientArea->mapTo(window(), QPoint(0, 0));
-    update_borders(wf_id, relative_position.y(), relative_position.x() * 2 + 1,
-        relative_position.x(), relative_position.x());
+    update_borders(wf_id, relative_position.y(), 0,
+        relative_position.x(), relative_position.x(), settings->borderSize);
 }
 
 Qt::Edges DecorationWindow::getEdgesAt(const QPoint & pos)

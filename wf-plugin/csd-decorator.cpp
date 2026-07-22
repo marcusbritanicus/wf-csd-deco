@@ -921,7 +921,7 @@ class csd_decoration_object_t : public wf::txn::transaction_object_t
             .x     = bbox.x + margin_left,
             .y     = bbox.y + margin_top,
             .width = bbox.width - margin_left * 2,
-            .height = bbox.height - margin_top - margin_left,
+            .height = bbox.height - margin_top - margin_left - margin_bottom,
         };
         masked->allowed ^= cut_out;
     }
@@ -948,7 +948,7 @@ class csd_decoration_object_t : public wf::txn::transaction_object_t
 };
 
 void do_update_borders(wl_client*, struct wl_resource*, uint32_t id, uint32_t top, uint32_t bottom,
-    uint32_t left, uint32_t right)
+    uint32_t left, uint32_t right, uint32_t border)
 {
     wayfire_view target = nullptr;
     for (auto& v : wf::get_core().get_all_views())
@@ -977,8 +977,8 @@ void do_update_borders(wl_client*, struct wl_resource*, uint32_t id, uint32_t to
     bool use_csd = data->decoration->use_csd;
     LOGI(use_csd);
 
-    deco_margins.top    = top - left - 1;
-    deco_margins.bottom = bottom;
+    deco_margins.top    = top - left + border;
+    deco_margins.bottom = right;
     deco_margins.left   = right;
     deco_margins.right  = right;
     data->decoration->set_margins(top, bottom, left, right, data->margin_offset);

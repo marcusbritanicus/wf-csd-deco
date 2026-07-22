@@ -90,7 +90,6 @@ class DecorationWindow : public QWidget
 
     Qt::Edges getEdgesAt(const QPoint & pos);
     void updateCursorShape(const QPoint & pos);
-    int defaultBorderSize = 2;
 
     QPointer<Settings> settings;
 

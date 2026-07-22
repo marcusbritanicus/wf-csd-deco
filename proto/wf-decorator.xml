@@ -14,6 +14,7 @@
             <arg name="bottom" type="uint"/>
             <arg name="left"   type="uint"/>
             <arg name="right"  type="uint"/>
+            <arg name="border"  type="uint"/>
         </request>
 
         <request name="group_windows">

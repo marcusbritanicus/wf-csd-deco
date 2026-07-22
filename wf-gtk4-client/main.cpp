@@ -75,7 +75,7 @@ static void on_area_resized(GtkDrawingArea*, int w, int h, gpointer data)
 
     if (final_y > 0)
     {
-        update_borders(id, final_y, 0, final_x, 0);
+        update_borders(id, final_y, 3, final_x, 0, 2);
     }
 }
 
