@@ -616,14 +616,9 @@ class csd_decoration_object_t : public wf::txn::transaction_object_t
 
     void handle_maximize()
     {
-        if (wf::toplevel_cast(target_view)->pending_tiled_edges() == wf::TILED_EDGES_ALL)
+        if (wf::toplevel_cast(target_view)->pending_tiled_edges())
         {
             root_node->set_offset({-margin_left, -margin_top});
-        } else if (wf::toplevel_cast(target_view)->pending_tiled_edges())
-        {
-            root_node->set_offset(
-                {use_csd ? -(margin_left - margin_offset.x - margin_offset.x / 2 + 1) : -margin_left,
-                    use_csd ? -(margin_top - margin_offset.y - margin_offset.y / 2 - 2) : -margin_top});
         } else
         {
             root_node->set_offset({use_csd ? -(margin_left - margin_offset.x) : -margin_left,

@@ -41,14 +41,20 @@ static QPainterPath getBorderPath(QRectF rect, qreal radius, qreal penSize)
     QPainterPath path;
     path.setFillRule(Qt::WindingFill);
 
-    qreal offset = penSize / 2.0;
+    qreal halfBorderSize = penSize / 2.0;
+    qreal offset = halfBorderSize;
 
     if (penSize >= 2.0)
     {
-        path.addRoundedRect(rect.adjusted(offset, offset, -offset, -offset), radius, radius);
+        QRectF borderRect = QRectF(-halfBorderSize, -halfBorderSize,
+            rect.width() + penSize, rect.height() + penSize).adjusted(penSize, penSize,
+            -penSize, -penSize);
+        path.addRoundedRect(borderRect, radius, radius);
     } else
     {
-        QRectF topRect    = QRectF(0, 0, rect.width(), radius * 2).adjusted(offset, offset, -offset, -offset);
+        QRectF topRect = QRectF(-halfBorderSize, -halfBorderSize,
+            rect.width() + penSize, rect.height() + penSize).adjusted(penSize, penSize,
+            -penSize, -penSize);
         QRectF bottomRect = QRectF(0, radius, rect.width(), rect.height() - radius).adjusted(offset, offset,
             -offset,
             -offset);
@@ -74,6 +80,7 @@ DecorationWindow::DecorationWindow(uint32_t id, QWidget *parent) :
     {
         baseLyt->setContentsMargins(QMargins(settings->borderSize, settings->borderSize, settings->borderSize,
             settings->borderSize));
+
         iconLbl->setFixedSize(QSize(settings->uiSize, settings->uiSize));
         titleLbl->setStyleSheet(QString("QLabel { color: %1; }").arg(settings->textColor.name()));
         minBtn->setFixedSize(QSize(settings->uiSize, settings->uiSize));
@@ -579,14 +586,7 @@ void DecorationWindow::paintEvent(QPaintEvent *event)
 
     painter.setBrush(settings->baseColor);
 
-    if (isMaximized())
-    {
-        qreal offset = settings->borderSize / 2.0;
-        painter.drawRect(QRectF(0, 0, width(), height()).adjusted(offset, offset, -offset, -offset));
-    } else
-    {
-        painter.drawPath(getBorderPath(QRectF(0, 0, width(), height()), radius, settings->borderSize));
-    }
+    painter.drawPath(getBorderPath(QRectF(0, 0, width(), height()), radius, settings->borderSize));
 
     painter.end();
 }
