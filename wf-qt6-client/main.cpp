@@ -47,16 +47,19 @@ static QPainterPath getBorderPath(QRectF rect, qreal radius, qreal penSize, qrea
 
     if (penSize >= 2.0)
     {
-        QRectF borderRect = QRectF(shadowSize - halfBorderSize, shadowSize - halfBorderSize, rect.width() + penSize, rect.height() + penSize).adjusted(penSize, penSize, -penSize, -penSize);
+        QRectF borderRect = QRectF(shadowSize - halfBorderSize, shadowSize - halfBorderSize,
+            rect.width() + penSize, rect.height() + penSize).adjusted(penSize, penSize, -penSize, -penSize);
         path.addRoundedRect(borderRect, radius, radius);
     } else
     {
         QRectF topRect = QRectF(shadowSize - halfBorderSize, shadowSize - halfBorderSize,
             rect.width() + penSize, rect.height() + penSize).adjusted(penSize, penSize,
             -penSize, -penSize);
-        QRectF bottomRect = QRectF(shadowSize, shadowSize + radius, rect.width(), rect.height() - radius).adjusted(offset, offset,
-            -offset,
-            -offset);
+        QRectF bottomRect =
+            QRectF(shadowSize, shadowSize + radius, rect.width(), rect.height() - radius).adjusted(offset,
+                offset,
+                -offset,
+                -offset);
 
         path.addRoundedRect(topRect, radius, radius);
         path.addRect(bottomRect);
@@ -77,9 +80,6 @@ DecorationWindow::DecorationWindow(uint32_t id, QWidget *parent) :
     connect(
         settings.get(), &Settings::settingsChanged, this, [this] ()
     {
-        baseLyt->setContentsMargins(QMargins(settings->borderSize, settings->borderSize, settings->borderSize,
-            settings->borderSize));
-
         iconLbl->setFixedSize(QSize(settings->uiSize, settings->uiSize));
         titleLbl->setStyleSheet(QString("QLabel { color: %1; }").arg(settings->textColor.name()));
         minBtn->setFixedSize(QSize(settings->uiSize, settings->uiSize));
@@ -87,11 +87,15 @@ DecorationWindow::DecorationWindow(uint32_t id, QWidget *parent) :
         closeBtn->setFixedSize(QSize(settings->uiSize, settings->uiSize));
         groupBtn->setFixedHeight(settings->uiSize);
 
-        resize(size());
+        mainLyt->setContentsMargins(QMargins(settings->shadowSize, settings->shadowSize, settings->shadowSize,
+            settings->shadowSize));
+        baseLyt->setContentsMargins(QMargins(settings->borderSize, settings->borderSize, settings->borderSize,
+            settings->borderSize));
 
-        QPoint relative_position = clientArea->mapTo(window(), QPoint(0, 0));
-        update_borders(wf_id, relative_position.y(), 0,
-            relative_position.x(), relative_position.x(), settings->shadowSize + settings->borderSize);
+        QPoint relative_position = clientArea->mapTo(base, QPoint(0, 0));
+        update_borders(wf_id, relative_position.y() + settings->shadowSize, 0,
+            settings->shadowSize + settings->borderSize, settings->shadowSize + settings->borderSize,
+            settings->shadowSize + settings->borderSize);
 
         repaint();
     });
@@ -137,13 +141,7 @@ void DecorationWindow::setupUI()
     maxBtn->setMouseTracking(true);
     connect(maxBtn, &DecorationButton::clicked, [this] ()
     {
-        if (isMaximized())
-        {
-            showNormal();
-        } else
-        {
-            showMaximized();
-        }
+        showMaximized();
     });
 
     closeBtn = new DecorationButton(DecorationButton::Type::Close, this);
@@ -175,14 +173,15 @@ void DecorationWindow::setupUI()
     base = new QWidget();
     base->setLayout(baseLyt);
 
-    QGraphicsDropShadowEffect *shadow = new QGraphicsDropShadowEffect( base );
+    QGraphicsDropShadowEffect *shadow = new QGraphicsDropShadowEffect(base);
     shadow->setBlurRadius(settings->shadowSize);
     shadow->setColor(settings->shadowColor);
     shadow->setOffset(0);
-    setGraphicsEffect( shadow );
+    setGraphicsEffect(shadow);
 
-    QVBoxLayout *mainLyt = new QVBoxLayout();
-    mainLyt->setContentsMargins(QMargins(settings->shadowSize, settings->shadowSize, settings->shadowSize, settings->shadowSize));
+    mainLyt = new QVBoxLayout();
+    mainLyt->setContentsMargins(QMargins(settings->shadowSize, settings->shadowSize, settings->shadowSize,
+        settings->shadowSize));
 
     mainLyt->addWidget(base);
 
@@ -511,9 +510,7 @@ void DecorationWindow::resizeEvent(QResizeEvent *event)
 {
     QWidget::resizeEvent(event);
 
-    QPoint relative_position = clientArea->mapTo(window(), QPoint(0, 0));
-    update_borders(wf_id, relative_position.y(), 0,
-        relative_position.x(), relative_position.x(), settings->shadowSize + settings->borderSize);
+    emit settings->settingsChanged();
 }
 
 Qt::Edges DecorationWindow::getEdgesAt(const QPoint & pos)
@@ -607,7 +604,7 @@ void DecorationWindow::paintEvent(QPaintEvent *event)
 
     painter.setBrush(settings->baseColor);
 
-    //painter.drawPath(getBorderPath(QRectF(0, 0, width(), height()), radius, settings->borderSize));
+    // painter.drawPath(getBorderPath(QRectF(0, 0, width(), height()), radius, settings->borderSize));
     painter.drawPath(getBorderPath(base->geometry(), radius, settings->borderSize, settings->shadowSize));
 
     painter.end();
@@ -648,6 +645,28 @@ void DecorationWindow::markAsActive(bool active)
 {
     isActive = active;
     repaint();
+}
+
+void DecorationWindow::notifyTiledEdges(uint32_t edges)
+{
+    if ((!tiledEdges && !edges) || (tiledEdges && edges))
+    {
+        return;
+    }
+
+    if (edges)
+    {
+        savedShadowSize = settings->shadowSize;
+        settings->shadowSize = 0;
+    } else
+    {
+        settings->shadowSize = savedShadowSize;
+        savedShadowSize = 0;
+    }
+
+    emit settings->settingsChanged();
+
+    tiledEdges = edges;
 }
 
 // ===== DecorationButton Implementation =====
@@ -1061,7 +1080,6 @@ void Settings::loadSettings()
             borderSize = borderSizeVar.toInt();
         }
     }
-            borderSize = 1;
 
     if (sett->contains("uiSize"))
     {

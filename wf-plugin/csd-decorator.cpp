@@ -211,6 +211,7 @@ wl_resource *decorator_resource = NULL;
 wl_listener deco_client_destroy_listener;
 void select_window(uint32_t select_id);
 void notify_focus(uint32_t focus_id);
+void notify_tiled(uint32_t wf_id, uint32_t edges);
 void ungroup_window(wl_client*, struct wl_resource*, uint32_t id, bool closing);
 
 class csd_decoration_object_t : public wf::txn::transaction_object_t
@@ -268,6 +269,7 @@ class csd_decoration_object_t : public wf::txn::transaction_object_t
                 {
                     on_commit.emit(nullptr);
                 }
+
                 wf::scene::update(target_view->get_root_node(), wf::scene::update_flag::REFOCUS);
 
                 break;
@@ -314,6 +316,7 @@ class csd_decoration_object_t : public wf::txn::transaction_object_t
                 LOGD(wf::dimensions(box), " != ", committed);
                 committed = wf::dimensions(box);
             }
+
             wlr_xdg_toplevel_set_size(toplevel, vg.width, vg.height);
 
             return;
@@ -328,13 +331,16 @@ class csd_decoration_object_t : public wf::txn::transaction_object_t
             {
                 adjust_target_geometry();
             }
+
             wf::txn::emit_object_ready(this);
             break;
         }
+
         if (on_commit.is_connected())
         {
             on_commit.emit(nullptr);
         }
+
         wf::scene::update(target_view->get_root_node(), wf::scene::update_flag::REFOCUS);
     }
 
@@ -348,7 +354,6 @@ class csd_decoration_object_t : public wf::txn::transaction_object_t
 
         set_pending_size(wf::dimensions(decorated_toplevel->pending().geometry));
 
-        auto prev_deco_state = deco_state;
         deco_state = csd_decoration_tx_state::START;
 
         LOGD("Committing with ", pending, " state is ", (int)deco_state);
@@ -472,10 +477,10 @@ class csd_decoration_object_t : public wf::txn::transaction_object_t
 
         on_request_deco_maximize.set_callback([=] (void*)
         {
+            auto edges = wf::toplevel_cast(target_view)->pending_tiled_edges();
             wf::get_core().default_wm->tile_request(
                 wf::toplevel_cast(target_view),
-                wf::toplevel_cast(target_view)->pending_tiled_edges() ?
-                0 : wf::TILED_EDGES_ALL);
+                edges ? 0 : wf::TILED_EDGES_ALL);
             handle_maximize();
         });
 
@@ -593,14 +598,8 @@ class csd_decoration_object_t : public wf::txn::transaction_object_t
 
     void handle_maximize()
     {
-        if (wf::toplevel_cast(target_view)->pending_tiled_edges())
-        {
-            root_node->set_offset({-margin_left, -margin_top});
-        } else
-        {
-            root_node->set_offset({use_csd ? -(margin_left - margin_offset.x) : -margin_left,
-                use_csd ? -(margin_top - margin_offset.y) : -margin_top});
-        }
+        auto edges = wf::toplevel_cast(target_view)->pending_tiled_edges();
+        notify_tiled(target_view->get_id(), edges);
     }
 
     wf::signal::connection_t<wf::view_title_changed_signal> on_view_title_changed =
@@ -855,12 +854,13 @@ class csd_decoration_object_t : public wf::txn::transaction_object_t
         target_view->get_transformed_node()->rem_transformer(deco_transformer_name);
     }
 
-    void set_margins(int top, int bottom, int left, int right, wf::point_t offset)
+    void set_margins(int top, int bottom, int left, int right, int border, wf::point_t offset)
     {
         this->margin_top    = top;
         this->margin_bottom = bottom;
         this->margin_left   = left;
         this->margin_right  = right;
+        this->margin_border = border;
         this->margin_offset = offset;
     }
 
@@ -902,6 +902,7 @@ class csd_decoration_object_t : public wf::txn::transaction_object_t
     double margin_top    = 0;
     double margin_right  = 0;
     double margin_bottom = 0;
+    double margin_border = 0;
     wf::point_t margin_offset;
 
     wf::scene::surface_state_t pending_state;
@@ -953,9 +954,18 @@ void do_update_borders(wl_client*, struct wl_resource*, uint32_t id, uint32_t to
     deco_margins.bottom = right;
     deco_margins.left   = right;
     deco_margins.right  = right;
-    data->decoration->set_margins(top, bottom, left, right, data->margin_offset);
-    data->decoration->root_node->set_offset({double(use_csd ? -(l - data->margin_offset.x) : -l),
-        double(use_csd ? -(t - data->margin_offset.y) : -t)});
+    data->decoration->set_margins(top, bottom, left, right, border, data->margin_offset);
+
+    auto edges = wf::toplevel_cast(data->decoration->target_view)->pending_tiled_edges();
+    if (edges)
+    {
+        data->decoration->root_node->set_offset({-l, -t});
+    } else
+    {
+        data->decoration->root_node->set_offset({use_csd ? -(l - data->margin_offset.x) : -l,
+            use_csd ? -(t - data->margin_offset.y) : -t});
+    }
+
     wf::get_core().tx_manager->schedule_object(wf::toplevel_cast(data->decoration->target_view)->toplevel());
     wf::scene::update(data->decoration->target_view->get_root_node(), 0xFF);
     wf::scene::update(data->decoration->root_node, 0xFF);
@@ -1048,6 +1058,14 @@ void notify_focus(uint32_t focus_id)
     if (decorator_resource)
     {
         wf_decorator_manager_send_notify_focus(decorator_resource, focus_id);
+    }
+}
+
+void notify_tiled(uint32_t wf_id, uint32_t edges)
+{
+    if (decorator_resource)
+    {
+        wf_decorator_manager_send_notify_tiled(decorator_resource, wf_id, edges);
     }
 }
 

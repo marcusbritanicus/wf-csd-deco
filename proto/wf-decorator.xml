@@ -47,5 +47,10 @@
         <event name="notify_focus">
             <arg name="id" type="uint"/>
         </event>
+
+        <event name="notify_tiled">
+            <arg name="id" type="uint"/>
+            <arg name="edges" type="uint"/>
+        </event>
     </interface>
 </protocol>

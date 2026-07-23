@@ -49,13 +49,19 @@ static void notify_focus(void*, wf_decorator_manager*, uint32_t view)
     }
 }
 
+static void notify_tiled(void*, wf_decorator_manager*, uint32_t view, uint32_t edges)
+{
+    qobject_cast<DecorationWindow*>(view_to_decor[view])->notifyTiledEdges(edges);
+}
+
 const wf_decorator_manager_listener decorator_listener =
 {
     create_new_decoration,
     destroy_decoration,
     title_changed,
     app_id_changed,
-    notify_focus
+    notify_focus,
+    notify_tiled
 };
 
 void registry_add_object(void*, struct wl_registry *registry, uint32_t id,

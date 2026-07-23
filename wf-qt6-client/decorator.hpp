@@ -46,6 +46,7 @@ class DecorationWindow : public QWidget
     void setWindowTitle(const QString & title);
     void setAppId(const QString & appId);
     void markAsActive(bool active);
+    void notifyTiledEdges(uint32_t edges);
     uint32_t getWfId() const
     {
         return wf_id;
@@ -77,6 +78,7 @@ class DecorationWindow : public QWidget
     uint32_t groupId;
     QList<uint32_t> groupOrder;
 
+    QPointer<QVBoxLayout> mainLyt;
     QPointer<QVBoxLayout> baseLyt;
     QPointer<QWidget> base;
     QPointer<QWidget> clientArea;
@@ -95,7 +97,8 @@ class DecorationWindow : public QWidget
     QPointer<Settings> settings;
 
     bool isActive = false;
-    bool isMaximize = false;
+    int savedShadowSize = 0;
+    uint32_t tiledEdges = 0;
 };
 
 class DecorationButton : public QWidget

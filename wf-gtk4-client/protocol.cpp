@@ -34,13 +34,17 @@ static void app_id_changed(void*,
 static void notify_focus(void*, wf_decorator_manager*, uint32_t view)
 {}
 
+static void notify_edges(void*, wf_decorator_manager*, uint32_t view, uint32_t edges)
+{}
+
 const wf_decorator_manager_listener decorator_listener =
 {
     create_new_decoration,
     destroy_decoration,
     title_changed,
     app_id_changed,
-    notify_focus
+    notify_focus,
+    notify_edges
 };
 
 static uint32_t decorator_global_id;
