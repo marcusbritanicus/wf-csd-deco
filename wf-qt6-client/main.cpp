@@ -37,7 +37,7 @@ QString qt6DecoCfgPath;
 // Global data
 QMap<uint32_t, QWidget*> view_to_decor;
 
-static QPainterPath getBorderPath(QRectF rect, qreal radius, qreal penSize)
+static QPainterPath getBorderPath(QRectF rect, qreal radius, qreal penSize, qreal shadowSize)
 {
     QPainterPath path;
     path.setFillRule(Qt::WindingFill);
@@ -47,16 +47,14 @@ static QPainterPath getBorderPath(QRectF rect, qreal radius, qreal penSize)
 
     if (penSize >= 2.0)
     {
-        QRectF borderRect = QRectF(-halfBorderSize, -halfBorderSize,
-            rect.width() + penSize, rect.height() + penSize).adjusted(penSize, penSize,
-            -penSize, -penSize);
+        QRectF borderRect = QRectF(shadowSize - halfBorderSize, shadowSize - halfBorderSize, rect.width() + penSize, rect.height() + penSize).adjusted(penSize, penSize, -penSize, -penSize);
         path.addRoundedRect(borderRect, radius, radius);
     } else
     {
-        QRectF topRect = QRectF(-halfBorderSize, -halfBorderSize,
+        QRectF topRect = QRectF(shadowSize - halfBorderSize, shadowSize - halfBorderSize,
             rect.width() + penSize, rect.height() + penSize).adjusted(penSize, penSize,
             -penSize, -penSize);
-        QRectF bottomRect = QRectF(0, radius, rect.width(), rect.height() - radius).adjusted(offset, offset,
+        QRectF bottomRect = QRectF(shadowSize, shadowSize + radius, rect.width(), rect.height() - radius).adjusted(offset, offset,
             -offset,
             -offset);
 
@@ -72,7 +70,7 @@ DecorationWindow::DecorationWindow(uint32_t id, QWidget *parent) :
     QWidget(parent), wf_id(id), isGroupParent(false), groupId(0)
 {
     setWindowFlags(
-        Qt::Window | Qt::CustomizeWindowHint | Qt::FramelessWindowHint | Qt::BypassWindowManagerHint);
+        Qt::Window | Qt::CustomizeWindowHint | Qt::FramelessWindowHint);
 
     settings = new Settings(this);
 
@@ -93,7 +91,7 @@ DecorationWindow::DecorationWindow(uint32_t id, QWidget *parent) :
 
         QPoint relative_position = clientArea->mapTo(window(), QPoint(0, 0));
         update_borders(wf_id, relative_position.y(), 0,
-            relative_position.x(), relative_position.x(), settings->borderSize);
+            relative_position.x(), relative_position.x(), settings->shadowSize + settings->borderSize);
 
         repaint();
     });
@@ -119,7 +117,7 @@ void DecorationWindow::setupUI()
         settings->borderSize));
     baseLyt->setSpacing(0);
 
-    iconLbl = new TabDragSource(wf_id, this);
+    iconLbl = new TabDragSource(wf_id);
     iconLbl->setCursor(Qt::ArrowCursor);
     iconLbl->setFixedSize(QSize(settings->uiSize, settings->uiSize));
     iconLbl->setPixmap(QIcon::fromTheme("wayfire").pixmap(settings->uiSize));
@@ -137,8 +135,16 @@ void DecorationWindow::setupUI()
     maxBtn = new DecorationButton(DecorationButton::Type::Maximize, this);
     maxBtn->setFixedSize(QSize(settings->uiSize, settings->uiSize));
     maxBtn->setMouseTracking(true);
-    /** Although this seems counter-intuitive, this works. */
-    connect(maxBtn, &DecorationButton::clicked, this, &QWidget::showMaximized);
+    connect(maxBtn, &DecorationButton::clicked, [this] ()
+    {
+        if (isMaximized())
+        {
+            showNormal();
+        } else
+        {
+            showMaximized();
+        }
+    });
 
     closeBtn = new DecorationButton(DecorationButton::Type::Close, this);
     closeBtn->setFixedSize(QSize(settings->uiSize, settings->uiSize));
@@ -166,7 +172,7 @@ void DecorationWindow::setupUI()
     baseLyt->addLayout(titleLyt);
     baseLyt->addWidget(clientArea);
 
-    base = new QWidget(this);
+    base = new QWidget();
     base->setLayout(baseLyt);
 
     QGraphicsDropShadowEffect *shadow = new QGraphicsDropShadowEffect( base );
@@ -175,7 +181,7 @@ void DecorationWindow::setupUI()
     shadow->setOffset(0);
     setGraphicsEffect( shadow );
 
-    QVBoxLayout *mainLyt = new QVBoxLayout( this );
+    QVBoxLayout *mainLyt = new QVBoxLayout();
     mainLyt->setContentsMargins(QMargins(settings->shadowSize, settings->shadowSize, settings->shadowSize, settings->shadowSize));
 
     mainLyt->addWidget(base);
@@ -507,12 +513,12 @@ void DecorationWindow::resizeEvent(QResizeEvent *event)
 
     QPoint relative_position = clientArea->mapTo(window(), QPoint(0, 0));
     update_borders(wf_id, relative_position.y(), 0,
-        relative_position.x(), relative_position.x(), settings->borderSize);
+        relative_position.x(), relative_position.x(), settings->shadowSize + settings->borderSize);
 }
 
 Qt::Edges DecorationWindow::getEdgesAt(const QPoint & pos)
 {
-    int padding     = 3;
+    int padding     = settings->shadowSize + 3;
     Qt::Edges edges = {};
     if (pos.x() <= settings->borderSize + padding)
     {
@@ -602,7 +608,7 @@ void DecorationWindow::paintEvent(QPaintEvent *event)
     painter.setBrush(settings->baseColor);
 
     //painter.drawPath(getBorderPath(QRectF(0, 0, width(), height()), radius, settings->borderSize));
-    painter.drawPath(getBorderPath(base->geometry(), radius, settings->borderSize));
+    painter.drawPath(getBorderPath(base->geometry(), radius, settings->borderSize, settings->shadowSize));
 
     painter.end();
 }
@@ -1055,6 +1061,7 @@ void Settings::loadSettings()
             borderSize = borderSizeVar.toInt();
         }
     }
+            borderSize = 1;
 
     if (sett->contains("uiSize"))
     {

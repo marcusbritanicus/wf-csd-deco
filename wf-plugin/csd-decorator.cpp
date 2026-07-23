@@ -263,7 +263,11 @@ class csd_decoration_object_t : public wf::txn::transaction_object_t
                 break;
 
               case csd_decoration_tx_state::START:
-                this->deco_state = csd_decoration_tx_state::WAITING_FINAL;
+                this->deco_state = csd_decoration_tx_state::TENTATIVE;
+                if (on_commit.is_connected())
+                {
+                    on_commit.emit(nullptr);
+                }
                 wf::scene::update(target_view->get_root_node(), wf::scene::update_flag::REFOCUS);
 
                 break;
@@ -272,9 +276,9 @@ class csd_decoration_object_t : public wf::txn::transaction_object_t
                 break;
 
               case csd_decoration_tx_state::TENTATIVE:
-                this->deco_state = csd_decoration_tx_state::STABLE;
+                this->deco_state = csd_decoration_tx_state::WAITING_FINAL;
                 wf::txn::emit_object_ready(this);
-                break;
+                return;
             }
         }
 
@@ -309,13 +313,8 @@ class csd_decoration_object_t : public wf::txn::transaction_object_t
             {
                 LOGD(wf::dimensions(box), " != ", committed);
                 committed = wf::dimensions(box);
-                adjust_target_geometry();
             }
-
-            if (use_csd && (wf::dimensions(box) != wf::dimensions(vg)))
-            {
-                wlr_xdg_toplevel_set_size(toplevel, vg.width, vg.height);
-            }
+            wlr_xdg_toplevel_set_size(toplevel, vg.width, vg.height);
 
             return;
 
@@ -325,10 +324,17 @@ class csd_decoration_object_t : public wf::txn::transaction_object_t
 
           case csd_decoration_tx_state::WAITING_FINAL:
             deco_state = csd_decoration_tx_state::STABLE;
+            if (wf::dimensions(box) != committed)
+            {
+                adjust_target_geometry();
+            }
             wf::txn::emit_object_ready(this);
             break;
         }
-
+        if (on_commit.is_connected())
+        {
+            on_commit.emit(nullptr);
+        }
         wf::scene::update(target_view->get_root_node(), wf::scene::update_flag::REFOCUS);
     }
 
@@ -350,34 +356,9 @@ class csd_decoration_object_t : public wf::txn::transaction_object_t
 
         wlr_box box = toplevel->base->geometry;
 
-        if (wf::dimensions(box) != pending)
-        {
-            if (!use_csd && (prev_deco_state == csd_decoration_tx_state::TENTATIVE))
-            {
-                wlr_xdg_toplevel_set_size(toplevel, pending.width, pending.height);
-            }
-        } else
+        if (wf::dimensions(box) == pending)
         {
             wf::txn::emit_object_ready(this);
-            return;
-        }
-
-        switch (this->deco_state)
-        {
-          case csd_decoration_tx_state::STABLE:
-            return;
-
-          case csd_decoration_tx_state::TENTATIVE:
-            return;
-
-          case csd_decoration_tx_state::START:
-            deco_state = csd_decoration_tx_state::TENTATIVE;
-            return;
-
-          case csd_decoration_tx_state::WAITING_FINAL:
-            deco_state = csd_decoration_tx_state::STABLE;
-            wf::txn::emit_object_ready(this);
-            return;
         }
     }
 
@@ -390,10 +371,6 @@ class csd_decoration_object_t : public wf::txn::transaction_object_t
 
         deco_node->apply_state(std::move(pending_state));
         recompute_mask();
-        if (on_commit.is_connected())
-        {
-            on_commit.emit(nullptr);
-        }
     }
 
     void adjust_target_geometry()
@@ -1562,7 +1539,6 @@ class csd_decoration_plugin : public wf::plugin_interface_t
 
         wf_decorator_manager_send_title_changed(decorator_resource, id, target->get_title().c_str());
         wf_decorator_manager_send_app_id_changed(decorator_resource, id, target->get_app_id().c_str());
-        // do_update_borders(NULL, NULL, target->get_id(), 0, 0, 0, 0);
 
         /* Nudge so the client computes and sends the decorator window shadow margins */
         auto vg = target->get_geometry();

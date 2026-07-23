@@ -95,6 +95,7 @@ class DecorationWindow : public QWidget
     QPointer<Settings> settings;
 
     bool isActive = false;
+    bool isMaximize = false;
 };
 
 class DecorationButton : public QWidget
