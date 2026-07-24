@@ -559,6 +559,8 @@ class csd_decoration_object_t : public wf::txn::transaction_object_t
         {
             notify_focus(target_view->get_id());
         }
+
+        handle_maximize();
     }
 
     void handle_destroy()
