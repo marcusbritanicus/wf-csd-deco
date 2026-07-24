@@ -864,7 +864,7 @@ void TabDropTarget::addWindow(uint32_t wf_id, const QString & appId, const QStri
     // Ungroup button clicked → perform full ungroup
     connect(entry, &GroupEntry::ungroup, this, [this, wf_id] ()
     {
-        DecorationWindow *parentWin = qobject_cast<DecorationWindow*>(parent());
+        DecorationWindow *parentWin = qobject_cast<DecorationWindow*>(parent()->parent());
         if (!parentWin)
         {
             return;
@@ -907,7 +907,7 @@ void TabDropTarget::updateButtonState()
         setToolTip("Drop here to group windows");
     } else
     {
-        DecorationWindow *parentWin = qobject_cast<DecorationWindow*>(parent());
+        DecorationWindow *parentWin = qobject_cast<DecorationWindow*>(parent()->parent());
         uint32_t activeWfId = parentWin ? parentWin->getWfId() : 0;
 
         QAction *displayAction = nullptr;
@@ -982,7 +982,7 @@ void TabDropTarget::dropEvent(QDropEvent *event)
         uint32_t dropped_wf_id = event->mimeData()->data("application/x-wf-window-id").toUInt(&ok);
         if (ok)
         {
-            DecorationWindow *targetWindow = qobject_cast<DecorationWindow*>(parent());
+            DecorationWindow *targetWindow = qobject_cast<DecorationWindow*>(parent()->parent());
             if (targetWindow)
             {
                 targetWindow->group(targetWindow->getWfId(), dropped_wf_id);
