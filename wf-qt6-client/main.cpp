@@ -121,12 +121,12 @@ void DecorationWindow::setupUI()
         settings->borderSize));
     baseLyt->setSpacing(0);
 
-    iconLbl = new TabDragSource(wf_id);
+    iconLbl = new TabDragSource(wf_id, this);
     iconLbl->setCursor(Qt::ArrowCursor);
     iconLbl->setFixedSize(QSize(settings->uiSize, settings->uiSize));
     iconLbl->setPixmap(QIcon::fromTheme("wayfire").pixmap(settings->uiSize));
 
-    titleLbl = new QLabel(this);
+    titleLbl = new QLabel();
     titleLbl->setCursor(Qt::ArrowCursor);
     titleLbl->setStyleSheet(QString("QLabel { color: %1; }").arg(settings->textColor.name()));
     titleLbl->setFont(settings->titleFont);
@@ -151,6 +151,7 @@ void DecorationWindow::setupUI()
 
     groupBtn = new TabDropTarget(this);
     groupBtn->setFixedHeight(settings->uiSize);
+    groupBtn->setCursor(Qt::ArrowCursor);
 
     clientArea = new QWidget();
     clientArea->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
@@ -172,6 +173,7 @@ void DecorationWindow::setupUI()
 
     base = new QWidget();
     base->setLayout(baseLyt);
+    base->setCursor(Qt::ArrowCursor);
 
     QGraphicsDropShadowEffect *shadow = new QGraphicsDropShadowEffect(base);
     shadow->setBlurRadius(settings->shadowSize);
