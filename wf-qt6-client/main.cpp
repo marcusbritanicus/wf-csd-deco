@@ -152,6 +152,8 @@ void DecorationWindow::setupUI()
     groupBtn = new TabDropTarget(this);
     groupBtn->setFixedHeight(settings->uiSize);
     groupBtn->setCursor(Qt::ArrowCursor);
+    groupBtn->setStyleSheet(QString("TabDropTarget { color: %1; background-color: %2; }").arg(settings->
+        textColor.name(), settings->baseColor.name()));
 
     clientArea = new QWidget();
     clientArea->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
