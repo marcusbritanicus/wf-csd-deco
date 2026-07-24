@@ -481,12 +481,12 @@ class csd_decoration_object_t : public wf::txn::transaction_object_t
             wf::get_core().default_wm->tile_request(
                 wf::toplevel_cast(target_view),
                 edges ? 0 : wf::TILED_EDGES_ALL);
-            handle_maximize();
+            send_tiled_edges();
         });
 
         on_request_target_maximize.set_callback([=] (void*)
         {
-            handle_maximize();
+            send_tiled_edges();
         });
 
         on_request_minimize.set_callback([=] (void*)
@@ -560,7 +560,7 @@ class csd_decoration_object_t : public wf::txn::transaction_object_t
             notify_focus(target_view->get_id());
         }
 
-        handle_maximize();
+        send_tiled_edges();
     }
 
     void handle_destroy()
@@ -598,7 +598,7 @@ class csd_decoration_object_t : public wf::txn::transaction_object_t
         handle_destroy();
     };
 
-    void handle_maximize()
+    void send_tiled_edges()
     {
         auto edges = wf::toplevel_cast(target_view)->pending_tiled_edges();
         notify_tiled(target_view->get_id(), edges);
@@ -613,7 +613,7 @@ class csd_decoration_object_t : public wf::txn::transaction_object_t
 
     wf::signal::connection_t<wf::view_tiled_signal> on_view_tiled = [=] (wf::view_tiled_signal*)
     {
-        handle_maximize();
+        send_tiled_edges();
     };
 
     wf::signal::connection_t<wf::view_minimized_signal> on_view_minimized =
