@@ -1,41 +1,58 @@
 #include "protocol.hpp"
 #include "wf-decorator-client-protocol.h"
+#include "decorator.hpp"
 #include <wayland-client.h>
-#include <string.h>
-#include <iostream>
+#include <cstring>
+#include <QDebug>
+#include <QApplication>
 
 static wf_decorator_manager *decorator_manager;
+static uint32_t decorator_global_id;
+
+// Forward declarations
+extern QMap<uint32_t, QWidget*> view_to_decor;
 
 static void create_new_decoration(void*, wf_decorator_manager*, uint32_t view_id)
 {
-    std::cout << "create new decoration" << std::endl;
+    qDebug() << "create new decoration";
     auto window = create_deco_window(view_id);
     view_to_decor[view_id] = window;
 }
 
 static void destroy_decoration(void*, wf_decorator_manager*, uint32_t view_id)
 {
-    std::cout << "destroy decoration" << std::endl;
+    qDebug() << "destroy decoration";
     destroy_deco_window(view_id);
 }
 
-static void title_changed(void*,
-    wf_decorator_manager*, uint32_t view, const char *new_title)
+static void title_changed(void*, wf_decorator_manager*, uint32_t view, const char *new_title)
 {
     set_title(view_to_decor[view], new_title);
 }
 
-static void app_id_changed(void*,
-    wf_decorator_manager*, uint32_t view, const char *new_app_id)
+static void app_id_changed(void*, wf_decorator_manager*, uint32_t view, const char *new_app_id)
 {
     set_app_id(view_to_decor[view], new_app_id);
 }
 
 static void notify_focus(void*, wf_decorator_manager*, uint32_t view)
-{}
+{
+    for (uint32_t view_id : view_to_decor.keys())
+    {
+        if (view_id == view)
+        {
+            qobject_cast<DecorationWindow*>(view_to_decor[view_id])->markAsActive(true);
+        } else
+        {
+            qobject_cast<DecorationWindow*>(view_to_decor[view_id])->markAsActive(false);
+        }
+    }
+}
 
-static void notify_edges(void*, wf_decorator_manager*, uint32_t view, uint32_t edges)
-{}
+static void notify_tiled(void*, wf_decorator_manager*, uint32_t view, uint32_t edges)
+{
+    qobject_cast<DecorationWindow*>(view_to_decor[view])->notifyTiledEdges(edges);
+}
 
 const wf_decorator_manager_listener decorator_listener =
 {
@@ -44,21 +61,19 @@ const wf_decorator_manager_listener decorator_listener =
     title_changed,
     app_id_changed,
     notify_focus,
-    notify_edges
+    notify_tiled
 };
 
-static uint32_t decorator_global_id;
 void registry_add_object(void*, struct wl_registry *registry, uint32_t id,
     const char *interface, uint32_t)
 {
-    std::cout << "new registry: " << interface << std::endl;
+    qDebug() << "new registry:" << interface;
     if ((strcmp(interface, wf_decorator_manager_interface.name) == 0) &&
         (decorator_global_id != id))
     {
-        std::cout << "bind it" << std::endl;
-        decorator_manager =
-            (wf_decorator_manager*)wl_registry_bind(registry, id, &wf_decorator_manager_interface, 1u);
-
+        qDebug() << "bind it";
+        decorator_manager = (wf_decorator_manager*)wl_registry_bind(registry, id,
+            &wf_decorator_manager_interface, 1u);
         wf_decorator_manager_add_listener(decorator_manager, &decorator_listener, NULL);
         decorator_global_id = id;
     }
@@ -73,8 +88,7 @@ void registry_remove_object(void*, struct wl_registry*, uint32_t id)
     }
 }
 
-static struct wl_registry_listener registry_listener =
-{
+static struct wl_registry_listener registry_listener = {
     &registry_add_object,
     &registry_remove_object
 };
@@ -130,11 +144,47 @@ void ungroup_window(uint32_t id)
     wf_decorator_manager_ungroup_window(decorator_manager, id);
 }
 
-void setup_protocol(GdkDisplay *displ)
+void setup_protocol(void *display)
 {
-    auto display  = gdk_wayland_display_get_wl_display(displ);
-    auto registry = wl_display_get_registry(display);
-
+    // In Qt6, you would get the Wayland display differently
+    // This is a placeholder - you'll need to adapt this for Qt's Wayland integration
+    auto display_wl = (wl_display*)display;
+    auto registry   = wl_display_get_registry(display_wl);
     wl_registry_add_listener(registry, &registry_listener, NULL);
-    wl_display_roundtrip(display);
+    wl_display_roundtrip(display_wl);
+}
+
+DecorationWindow *create_deco_window(uint32_t wf_id)
+{
+    DecorationWindow *window = new DecorationWindow(wf_id);
+    window->setWindowTitle(QString("__wf_decorator:%1").arg(wf_id));
+    window->show();
+    return window;
+}
+
+void destroy_deco_window(uint32_t wf_id)
+{
+    auto window = view_to_decor[wf_id];
+    if (window)
+    {
+        window->close();
+        delete window;
+        view_to_decor.remove(wf_id);
+    }
+}
+
+void set_title(QWidget *window, const char *title)
+{
+    if (auto *dec = qobject_cast<DecorationWindow*>(window))
+    {
+        dec->setWindowTitle(QString::fromUtf8(title));
+    }
+}
+
+void set_app_id(QWidget *window, const char *app_id)
+{
+    if (auto *dec = qobject_cast<DecorationWindow*>(window))
+    {
+        dec->setAppId(QString::fromUtf8(app_id));
+    }
 }

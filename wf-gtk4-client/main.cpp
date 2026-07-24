@@ -75,8 +75,51 @@ static void on_area_resized(GtkDrawingArea*, int w, int h, gpointer data)
 
     if (final_y > 0)
     {
-        update_borders(id, final_y, final_x, final_x, final_x);
+        update_borders(id, final_y, 3, final_x, 0, 2);
     }
+}
+
+static GtkWidget *get_icon(std::string app_id)
+{
+    GtkWidget *image = nullptr;
+    auto theme = gtk_icon_theme_get_for_display(gdk_display_get_default());
+
+    auto _app_id = app_id;
+    auto dot_pos = _app_id.find_last_of(".");
+
+    auto lower_case_app_id = app_id;
+    for (char & c : lower_case_app_id)
+    {
+        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
+    }
+
+    if (gtk_icon_theme_has_icon(theme, lower_case_app_id.c_str()))
+    {
+        image = gtk_image_new_from_icon_name(lower_case_app_id.c_str());
+    } else if ((dot_pos != std::string::npos) && (dot_pos < _app_id.length() - 1))
+    {
+        _app_id = _app_id.substr(dot_pos + 1);
+
+        if (gtk_icon_theme_has_icon(theme, _app_id.c_str()))
+        {
+            image = gtk_image_new_from_icon_name(_app_id.c_str());
+        }
+    } else if ((dot_pos != std::string::npos) && (dot_pos < lower_case_app_id.length() - 1))
+    {
+        _app_id = lower_case_app_id.substr(dot_pos + 1);
+
+        if (gtk_icon_theme_has_icon(theme, _app_id.c_str()))
+        {
+            image = gtk_image_new_from_icon_name(_app_id.c_str());
+        }
+    }
+
+    if (!image)
+    {
+        image = gtk_image_new_from_icon_name(app_id.c_str());
+    }
+
+    return image;
 }
 
 // --- Drag Source Setup ---
@@ -103,7 +146,7 @@ static void drag_begin_cb(GtkDragSource *source,
     g_print("Drag begin.\n");
     auto data = (window_data*)user_data;
     GtkDragIcon *drag_icon = GTK_DRAG_ICON(gtk_drag_icon_get_for_drag(drag));
-    GtkWidget *image = gtk_image_new_from_icon_name(data->app_id.c_str());
+    GtkWidget *image = get_icon(data->app_id);
     gtk_image_set_pixel_size(GTK_IMAGE(image), 48);
     gtk_drag_icon_set_child(drag_icon, image);
 }
@@ -287,49 +330,6 @@ static void group(window_data *drop_target_data, uint32_t wf_id)
     clear_group_tabs(group_id);
     refresh_group(group_id);
     scroll_sync(drop_target_data);
-}
-
-static GtkWidget *get_icon(std::string app_id)
-{
-    GtkWidget *image = nullptr;
-    auto theme = gtk_icon_theme_get_for_display(gdk_display_get_default());
-
-    auto _app_id = app_id;
-    auto dot_pos = _app_id.find_last_of(".");
-
-    auto lower_case_app_id = app_id;
-    for (char & c : lower_case_app_id)
-    {
-        c = static_cast<char>(std::tolower(static_cast<unsigned char>(c)));
-    }
-
-    if (gtk_icon_theme_has_icon(theme, lower_case_app_id.c_str()))
-    {
-        image = gtk_image_new_from_icon_name(lower_case_app_id.c_str());
-    } else if ((dot_pos != std::string::npos) && (dot_pos < _app_id.length() - 1))
-    {
-        _app_id = _app_id.substr(dot_pos + 1);
-
-        if (gtk_icon_theme_has_icon(theme, _app_id.c_str()))
-        {
-            image = gtk_image_new_from_icon_name(_app_id.c_str());
-        }
-    } else if ((dot_pos != std::string::npos) && (dot_pos < lower_case_app_id.length() - 1))
-    {
-        _app_id = lower_case_app_id.substr(dot_pos + 1);
-
-        if (gtk_icon_theme_has_icon(theme, _app_id.c_str()))
-        {
-            image = gtk_image_new_from_icon_name(_app_id.c_str());
-        }
-    }
-
-    if (!image)
-    {
-        image = gtk_image_new_from_icon_name(app_id.c_str());
-    }
-
-    return image;
 }
 
 static void add_tab_button(window_data *wdata, window_data *cdata)

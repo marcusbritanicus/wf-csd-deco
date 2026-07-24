@@ -14,6 +14,7 @@
             <arg name="bottom" type="uint"/>
             <arg name="left"   type="uint"/>
             <arg name="right"  type="uint"/>
+            <arg name="border"  type="uint"/>
         </request>
 
         <request name="group_windows">
@@ -41,6 +42,15 @@
         <event name="app_id_changed">
             <arg name="decoration" type="uint"/>
             <arg name="new_app_id" type="string"/>
+        </event>
+
+        <event name="notify_focus">
+            <arg name="id" type="uint"/>
+        </event>
+
+        <event name="notify_tiled">
+            <arg name="id" type="uint"/>
+            <arg name="edges" type="uint"/>
         </event>
     </interface>
 </protocol>
