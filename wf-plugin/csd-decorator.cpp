@@ -957,9 +957,14 @@ void do_update_borders(wl_client*, struct wl_resource*, uint32_t id, uint32_t to
     data->decoration->set_margins(top, bottom, left, right, border, data->margin_offset);
 
     auto edges = wf::toplevel_cast(data->decoration->target_view)->pending_tiled_edges();
-    if (edges)
+    if (edges == wf::TILED_EDGES_ALL)
     {
         data->decoration->root_node->set_offset({-l, -t});
+    } else if (edges)
+    {
+        data->decoration->root_node->set_offset(
+            {use_csd ? -(l - data->margin_offset.x - data->margin_offset.x / 2 + 1) : -l,
+                use_csd ? -(t - data->margin_offset.y - data->margin_offset.y / 2 - 2) : -t});
     } else
     {
         data->decoration->root_node->set_offset({use_csd ? -(l - data->margin_offset.x) : -l,
