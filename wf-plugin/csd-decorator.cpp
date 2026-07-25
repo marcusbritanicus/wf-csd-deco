@@ -522,6 +522,7 @@ class csd_decoration_object_t : public wf::txn::transaction_object_t
 
             popup->parent = target_view->get_wlr_surface();
             on_map_popup.connect(&popup->base->surface->events.map);
+            on_destroy_popup.connect(&popup->base->surface->events.destroy);
             create_xdg_popup(popup);
             current_popup = popup;
         });
@@ -531,7 +532,12 @@ class csd_decoration_object_t : public wf::txn::transaction_object_t
             auto popup = current_popup;
             popup->base->pending.geometry.y += margin_top - margin_bottom - 5;
             popup->base->current.geometry.y  = popup->base->pending.geometry.y;
+        });
+
+        on_destroy_popup.set_callback([=] (void*)
+        {
             on_map_popup.disconnect();
+            on_destroy_popup.disconnect();
         });
 
         on_request_move.connect(&toplevel->events.request_move);
@@ -544,6 +550,11 @@ class csd_decoration_object_t : public wf::txn::transaction_object_t
         target_view->connect(&on_target_unmapped);
         target_view->connect(&on_view_title_changed);
         target_view->connect(&on_view_focus_request);
+        if (target_view->get_output())
+        {
+            target_view->get_output()->connect(&on_request_target_move);
+        }
+
         on_request_minimize.connect(&toplevel->events.request_minimize);
         on_new_popup.connect(&wlr_xdg_surface_try_from_wlr_surface(
             deco_node->get_surface())->client->shell->events.new_popup);
@@ -589,6 +600,7 @@ class csd_decoration_object_t : public wf::txn::transaction_object_t
         on_target_unmapped.disconnect();
         on_new_popup.disconnect();
         on_map_popup.disconnect();
+        on_destroy_popup.disconnect();
         on_request_move.disconnect();
         on_request_resize.disconnect();
         on_request_minimize.disconnect();
@@ -600,6 +612,7 @@ class csd_decoration_object_t : public wf::txn::transaction_object_t
         on_view_activated.disconnect();
         on_view_title_changed.disconnect();
         on_view_focus_request.disconnect();
+        on_request_target_move.disconnect();
 
         this->toplevel = nullptr;
     }
@@ -607,6 +620,143 @@ class csd_decoration_object_t : public wf::txn::transaction_object_t
     wf::signal::connection_t<wf::view_unmapped_signal> on_target_unmapped = [=] (wf::view_unmapped_signal*)
     {
         handle_destroy();
+    };
+
+    void sync_group_tiled_states(uint32_t edges)
+    {
+        if (!group_id)
+        {
+            return;
+        }
+
+        wf::geometry_t target_geometry;
+        if (edges)
+        {
+            target_geometry = wf::toplevel_cast(target_view)->get_geometry();
+            auto test_geometry =
+                wf::get_core().default_wm->get_last_windowed_geometry(wf::toplevel_cast(target_view)).
+                    value_or({0, 0, -1, -1});
+            if (test_geometry.width == -1)
+            {
+                wf::get_core().default_wm->update_last_windowed_geometry(wf::toplevel_cast(target_view));
+            }
+        }
+
+        for (auto& v : wf::get_core().get_all_views())
+        {
+            if (v->role != wf::VIEW_ROLE_TOPLEVEL)
+            {
+                continue;
+            }
+
+            auto data = wf::toplevel_cast(v)->toplevel()->get_data<csd_toplevel_custom_data>();
+            if (data && data->decoration)
+            {
+                data->decoration->on_view_tiled.disconnect();
+            }
+        }
+
+        for (auto& v : wf::get_core().get_all_views())
+        {
+            if (v->role != wf::VIEW_ROLE_TOPLEVEL)
+            {
+                continue;
+            }
+
+            auto data = wf::toplevel_cast(v)->toplevel()->get_data<csd_toplevel_custom_data>();
+            if (!data || !data->decoration)
+            {
+                continue;
+            }
+
+            if (data->decoration->group_id != group_id)
+            {
+                continue;
+            }
+
+            if ((v != target_view) && (edges != wf::toplevel_cast(v)->pending_tiled_edges()))
+            {
+                auto vg = wf::toplevel_cast(v)->get_geometry();
+                if (edges)
+                {
+                    auto test_geometry =
+                        wf::get_core().default_wm->get_last_windowed_geometry(wf::toplevel_cast(v)).
+                            value_or({0, 0, -1, -1});
+                    if (test_geometry.width == -1)
+                    {
+                        wf::get_core().default_wm->update_last_windowed_geometry(wf::toplevel_cast(v));
+                    }
+                } else
+                {
+                    target_geometry =
+                        wf::get_core().default_wm->get_last_windowed_geometry(wf::toplevel_cast(v)).
+                            value_or(vg);
+                }
+
+                wf::view_tiled_signal data;
+                data.view = wf::toplevel_cast(v);
+                data.old_edges = wf::toplevel_cast(v)->toplevel()->pending().tiled_edges;
+                data.new_edges = edges;
+
+                wf::toplevel_cast(v)->toplevel()->pending().tiled_edges = edges;
+                v->emit(&data);
+                wf::toplevel_cast(v)->set_geometry(target_geometry);
+            }
+        }
+
+        for (auto& v : wf::get_core().get_all_views())
+        {
+            if (v->role != wf::VIEW_ROLE_TOPLEVEL)
+            {
+                continue;
+            }
+
+            auto data = wf::toplevel_cast(v)->toplevel()->get_data<csd_toplevel_custom_data>();
+            if (data && data->decoration)
+            {
+                data->decoration->target_view->connect(&data->decoration->on_view_tiled);
+            }
+        }
+
+        send_tiled_edges();
+    }
+
+    wf::signal::connection_t<wf::view_move_request_signal> on_request_target_move =
+        [=] (wf::view_move_request_signal*)
+    {
+        if (!group_id)
+        {
+            return;
+        }
+
+        for (auto& v : wf::get_core().get_all_views())
+        {
+            if (v->role != wf::VIEW_ROLE_TOPLEVEL)
+            {
+                continue;
+            }
+
+            auto data = wf::toplevel_cast(v)->toplevel()->get_data<csd_toplevel_custom_data>();
+            if (!data || !data->decoration)
+            {
+                continue;
+            }
+
+            if (data->decoration->group_id != group_id)
+            {
+                continue;
+            }
+
+            if (wf::toplevel_cast(v)->pending_tiled_edges())
+            {
+                continue;
+            }
+
+            if (v != target_view)
+            {
+                wf::get_core().default_wm->update_last_windowed_geometry(wf::toplevel_cast(v));
+            }
+        }
     };
 
     void send_tiled_edges()
@@ -622,9 +772,9 @@ class csd_decoration_object_t : public wf::txn::transaction_object_t
             target_view->get_id(), target_view->get_title().c_str());
     };
 
-    wf::signal::connection_t<wf::view_tiled_signal> on_view_tiled = [=] (wf::view_tiled_signal*)
+    wf::signal::connection_t<wf::view_tiled_signal> on_view_tiled = [=] (wf::view_tiled_signal *ev)
     {
-        send_tiled_edges();
+        sync_group_tiled_states(ev->new_edges);
     };
 
     wf::signal::connection_t<wf::view_minimized_signal> on_view_minimized =
@@ -878,7 +1028,7 @@ class csd_decoration_object_t : public wf::txn::transaction_object_t
     }
 
     uint32_t group_id = 0;
-    bool use_csd     = false;
+    bool use_csd = false;
     bool borders_set = false;
     wayfire_view target_view;
     decoration_node_t deco_node;
@@ -887,7 +1037,7 @@ class csd_decoration_object_t : public wf::txn::transaction_object_t
     std::shared_ptr<wf::scene::translation_node_t> root_node;
 
   private:
-    wf::dimensions_t pending   = {0, 0};
+    wf::dimensions_t pending = {0, 0};
     wf::dimensions_t committed = {0, 0};
 
     void recompute_mask()
@@ -911,9 +1061,9 @@ class csd_decoration_object_t : public wf::txn::transaction_object_t
         masked->allowed ^= cut_out;
     }
 
-    double margin_left   = 0;
-    double margin_top    = 0;
-    double margin_right  = 0;
+    double margin_left = 0;
+    double margin_top = 0;
+    double margin_right = 0;
     double margin_bottom = 0;
     double margin_border = 0;
     wf::point_t margin_offset;
@@ -927,7 +1077,8 @@ class csd_decoration_object_t : public wf::txn::transaction_object_t
     deco_animation_t progression;
     wf::geometry_t from_geometry, to_geometry;
 
-    wf::wl_listener_wrapper on_commit, on_new_popup, on_map_popup, on_deco_destroy, on_target_destroy;
+    wf::wl_listener_wrapper on_commit, on_new_popup, on_map_popup, on_destroy_popup, on_deco_destroy,
+        on_target_destroy;
     wf::wl_listener_wrapper on_request_move, on_request_resize, on_request_minimize;
     wf::wl_listener_wrapper on_request_deco_maximize, on_request_target_maximize;
     csd_decoration_tx_state deco_state = csd_decoration_tx_state::STABLE;
@@ -1484,11 +1635,12 @@ class csd_decoration_plugin : public wf::plugin_interface_t
             return;
         }
 
+        on_view_geometry_changed.disconnect();
         auto vg = wf::toplevel_cast(ev->view)->get_geometry();
 
         for (auto& v : wf::get_core().get_all_views())
         {
-            if ((v->role != wf::VIEW_ROLE_TOPLEVEL) || (v == ev->view))
+            if (v->role != wf::VIEW_ROLE_TOPLEVEL)
             {
                 continue;
             }
@@ -1504,11 +1656,15 @@ class csd_decoration_plugin : public wf::plugin_interface_t
                 continue;
             }
 
-            /* Temporarily disconnect handler to avoid loop */
-            on_view_geometry_changed.disconnect();
+            if (wf::toplevel_cast(ev->view)->pending_tiled_edges())
+            {
+                continue;
+            }
+
             wf::toplevel_cast(v)->move(vg.x, vg.y);
-            wf::get_core().connect(&on_view_geometry_changed);
         }
+
+        wf::get_core().connect(&on_view_geometry_changed);
     };
 
     void init_decor(wayfire_view view, wlr_surface *surface)
