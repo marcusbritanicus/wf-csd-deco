@@ -361,6 +361,12 @@ class csd_decoration_object_t : public wf::txn::transaction_object_t
         {
             on_commit.emit(nullptr);
         }
+
+        if (target_view->get_wlr_surface() &&
+            wlr_xwayland_surface_try_from_wlr_surface(target_view->get_wlr_surface()))
+        {
+            wlr_xdg_toplevel_set_size(toplevel, pending.width, pending.height);
+        }
     }
 
     void apply()
