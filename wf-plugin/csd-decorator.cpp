@@ -265,11 +265,6 @@ class csd_decoration_object_t : public wf::txn::transaction_object_t
 
               case csd_decoration_tx_state::START:
                 this->deco_state = csd_decoration_tx_state::TENTATIVE;
-                if (on_commit.is_connected())
-                {
-                    on_commit.emit(nullptr);
-                }
-
                 wf::scene::update(target_view->get_root_node(), wf::scene::update_flag::REFOCUS);
 
                 break;
@@ -300,14 +295,14 @@ class csd_decoration_object_t : public wf::txn::transaction_object_t
 
         wlr_box box = toplevel->base->geometry;
 
-        LOGD("Size is ", wf::dimensions(box), " state is ", (int)deco_state);
-
         auto vg = wf::toplevel_cast(target_view)->get_geometry();
 
         switch (this->deco_state)
         {
           case csd_decoration_tx_state::STABLE:
-          // Client simply committed, nothing has changed
+            // Client simply committed, nothing has changed
+
+            return;
 
           case csd_decoration_tx_state::TENTATIVE:
             // Client commits twice?
@@ -336,11 +331,6 @@ class csd_decoration_object_t : public wf::txn::transaction_object_t
             break;
         }
 
-        if (on_commit.is_connected())
-        {
-            on_commit.emit(nullptr);
-        }
-
         wf::scene::update(target_view->get_root_node(), wf::scene::update_flag::REFOCUS);
     }
 
@@ -364,6 +354,12 @@ class csd_decoration_object_t : public wf::txn::transaction_object_t
         if (wf::dimensions(box) == pending)
         {
             wf::txn::emit_object_ready(this);
+            return;
+        }
+
+        if (on_commit.is_connected())
+        {
+            on_commit.emit(nullptr);
         }
     }
 
