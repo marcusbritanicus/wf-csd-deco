@@ -295,6 +295,8 @@ class csd_decoration_object_t : public wf::txn::transaction_object_t
 
         wlr_box box = toplevel->base->geometry;
 
+        LOGD("Size is ", wf::dimensions(box), " state is ", (int)deco_state);
+
         auto vg = wf::toplevel_cast(target_view)->get_geometry();
 
         switch (this->deco_state)
@@ -453,7 +455,14 @@ class csd_decoration_object_t : public wf::txn::transaction_object_t
                 recompute_mask();
             }
 
-            size_updated();
+            if (deco_state != csd_decoration_tx_state::TENTATIVE)
+            {
+                size_updated();
+            } else
+            {
+                auto vg = wf::toplevel_cast(target_view)->get_geometry();
+                wlr_xdg_toplevel_set_size(toplevel, vg.width, vg.height);
+            }
         });
 
         on_deco_destroy.set_callback([=] (void*)
